@@ -105,11 +105,11 @@
         <div class="readout-row">
           <label class="num">
             X ({project.units})
-            <input type="number" step="any" value={originRel.x} onchange={(e) => setOriginX(parseFloat(e.target.value) || 0)} />
+            <input type="number" step="any" value={+originRel.x.toFixed(2)} onchange={(e) => setOriginX(parseFloat(e.target.value) || 0)} />
           </label>
           <label class="num">
             Y ({project.units})
-            <input type="number" step="any" value={originRel.y} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
+            <input type="number" step="any" value={+originRel.y.toFixed(2)} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
           </label>
           {#if !multi && strip && !isPoints}
             <label class="num">
