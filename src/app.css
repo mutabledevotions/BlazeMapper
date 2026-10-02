@@ -101,3 +101,7 @@ button:focus-visible {
   align-items: baseline;
   gap: 0.3rem;
 }
+
+input[type="range"] {
+  accent-color: var(--accent);
+}
