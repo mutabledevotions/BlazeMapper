@@ -42,6 +42,11 @@ export function bbox(geom, strip) {
   return impl(geom).bbox(geom, strip)
 }
 
+// Rotates the geometry's control points about `center` (world units), in degrees.
+export function rotate(geom, deg, center) {
+  return impl(geom).rotate(geom, deg, center)
+}
+
 export function registerGeometry(type, implementation) {
   REGISTRY[type] = implementation
 }

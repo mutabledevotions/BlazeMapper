@@ -5,7 +5,7 @@
   import { quantizeAngle } from '../core/geometry/line.js'
   import { sample } from '../core/geometry/index.js'
 
-  const strip = $derived(project.strips.find((s) => s.id === selection.stripId))
+  const strip = $derived(project.strips.find((s) => s.id === selection.primary))
   const isPoints = $derived(strip?.geom.type === 'points')
   const isFit = $derived(strip?.spacing === 'fit')
 
@@ -36,7 +36,9 @@
 
 <div class="strip-props">
   <h3>Strip properties</h3>
-  {#if !strip}
+  {#if selection.ids.length > 1}
+    <p class="empty">{selection.ids.length} strips selected</p>
+  {:else if !strip}
     <p class="empty">Select a strip to edit it.</p>
   {:else}
     <label>

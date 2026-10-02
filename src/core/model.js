@@ -12,11 +12,19 @@ export function newProject() {
   return {
     version: 1,
     units: 'mm',
-    grid: { size: 10, snap: true, show: true },
-    canvas: { w: 2000, h: 2000 },
+    grid: { divisions: 20, snap: true, show: true },
+    world: { x: 0, y: 0, size: 2000 },
     strips: [],
-    export: { round: 2, forceZ: false }
+    export: { decimals: 4, forceZ: false, anchors: false }
   }
+}
+
+// Grid step derived from the world box, so grid lines always meet its edges
+// (world.size / grid.divisions). Falls back to the full world size if divisions
+// is zero or negative (defensive -- the UI clamps divisions to >= 1).
+export function gridStep(project) {
+  const d = project.grid.divisions
+  return d > 0 ? project.world.size / d : project.world.size
 }
 
 const STRIP_COLORS = ['#4fc3f7', '#ff8a65', '#aed581', '#ba68c8', '#ffd54f', '#4db6ac', '#f06292', '#90a4ae']

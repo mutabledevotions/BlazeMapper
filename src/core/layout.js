@@ -38,14 +38,15 @@ export function computePixels(project) {
   return pixels
 }
 
-// Bounding box of every strip's geometry (hidden strips included -- this is used
-// for view framing, not export). Returns null for an empty project.
-export function projectBbox(project) {
+// Bounding box of a list of strips' geometry. Returns null for an empty list.
+// Shared by projectBbox (every strip, for view framing) and the canvas's
+// selection bbox (just the selected strips, for the group-rotate handle).
+export function stripsBbox(strips) {
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
   let maxY = -Infinity
-  for (const strip of project.strips) {
+  for (const strip of strips) {
     const b = bbox(strip.geom, strip)
     if (b.minX < minX) minX = b.minX
     if (b.minY < minY) minY = b.minY
@@ -54,4 +55,10 @@ export function projectBbox(project) {
   }
   if (!isFinite(minX)) return null
   return { minX, minY, maxX, maxY }
+}
+
+// Bounding box of every strip's geometry (hidden strips included -- this is used
+// for view framing, not export). Returns null for an empty project.
+export function projectBbox(project) {
+  return stripsBbox(project.strips)
 }

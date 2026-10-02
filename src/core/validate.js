@@ -49,6 +49,28 @@ export function validateProject(project) {
     }
   }
 
+  // Normalized-export sanity check: a pixel outside the world box lands outside
+  // 0..1 once exported. Pixelblaze still rescales (Fill/Contain), so this is a
+  // warning, not an error -- one per offending strip is plenty, not one per pixel.
+  const world = project.world
+  if (world && world.size) {
+    for (const strip of visible) {
+      const pts = sample(strip.geom, strip)
+      const outside = pts.some((p) => {
+        const nx = (p.x - world.x) / world.size
+        const ny = (p.y - world.y) / world.size
+        return nx < 0 || nx > 1 || ny < 0 || ny > 1
+      })
+      if (outside) {
+        warnings.push({
+          level: 'warning',
+          message: `"${strip.name}" has a pixel outside the world box (falls outside 0..1 once exported)`,
+          stripId: strip.id
+        })
+      }
+    }
+  }
+
   const seen = new Map()
   for (const strip of visible) {
     const pts = sample(strip.geom, strip)

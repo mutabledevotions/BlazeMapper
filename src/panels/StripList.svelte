@@ -3,7 +3,7 @@
   // Drag-and-drop reorders within a channel group or moves a strip into another
   // group (which sets strip.channel). Order within a channel = array order in
   // project.strips; reorderStrip() does the actual array surgery.
-  import { project, selection, selectStrip, removeStrip, updateStrip, reorderStrip } from '../state/project.svelte.js'
+  import { project, selection, selectStrip, toggleSelect, removeStrip, updateStrip, reorderStrip } from '../state/project.svelte.js'
 
   // Channels in ascending order, each with its strips in current array order.
   const groups = $derived.by(() => {
@@ -71,6 +71,13 @@
   function ledLabel(strip) {
     return strip.geom.type === 'points' ? strip.geom.pts.length : strip.ledCount
   }
+
+  // Plain click replaces the selection; Shift/Cmd-click toggles this row into
+  // or out of a multi-selection, matching the canvas's own click behaviour.
+  function onRowClick(strip, evt) {
+    if (evt.shiftKey || evt.metaKey) toggleSelect(strip.id)
+    else selectStrip(strip.id)
+  }
 </script>
 
 <div class="strip-list">
@@ -84,7 +91,7 @@
       <ul>
         {#each strips as strip (strip.id)}
           <li
-            class:selected={selection.stripId === strip.id}
+            class:selected={selection.ids.includes(strip.id)}
             class:dragging={dragId === strip.id}
             draggable="true"
             ondragstart={(evt) => onDragStart(evt, strip.id)}
@@ -118,7 +125,7 @@
                 </svg>
               {/if}
             </button>
-            <button class="row" onclick={() => selectStrip(strip.id)}>
+            <button class="row" onclick={(evt) => onRowClick(strip, evt)}>
               <span class="swatch" style:background={strip.color}></span>
               <span class="name">{strip.name}</span>
               <span class="meta">{ledLabel(strip)} LED</span>

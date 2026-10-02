@@ -116,3 +116,20 @@ export function scale(geom, k) {
   if (geom.p1) next.p1 = { x: geom.p1.x * k, y: geom.p1.y * k }
   return next
 }
+
+function rotatePoint(p, deg, center) {
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const dx = p.x - center.x
+  const dy = p.y - center.y
+  return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos }
+}
+
+// Rotates p0 (and p1, in fit mode) about `center`; angle is quantized the same
+// way a handle drag quantizes it, so group rotation and direct dragging agree.
+export function rotate(geom, deg, center) {
+  const next = { ...geom, p0: rotatePoint(geom.p0, deg, center), angle: quantizeAngle(geom.angle + deg) }
+  if (geom.p1) next.p1 = rotatePoint(geom.p1, deg, center)
+  return next
+}

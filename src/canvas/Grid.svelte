@@ -1,11 +1,12 @@
 <script>
   // Minor lines every `size`, major lines every 5x that, both clipped to the current viewBox.
-  let { viewBox, size } = $props()
+  // Origin (world.x, world.y) anchors the grid so lines always land on the world box's edges.
+  let { viewBox, size, originX = 0, originY = 0 } = $props()
 
   function lines(step, extra) {
-    const x0 = Math.floor((viewBox.x - extra) / step) * step
+    const x0 = originX + Math.floor((viewBox.x - extra - originX) / step) * step
     const x1 = viewBox.x + viewBox.w + extra
-    const y0 = Math.floor((viewBox.y - extra) / step) * step
+    const y0 = originY + Math.floor((viewBox.y - extra - originY) / step) * step
     const y1 = viewBox.y + viewBox.h + extra
     const vlines = []
     const hlines = []

@@ -2,18 +2,21 @@
 // No undo/redo yet (phase 4). Keep all mutation behind these actions so
 // history.js can later wrap them without canvas/panel code changing.
 
-import { newProject, newStrip } from '../core/model.js'
+import { newProject, newStrip, gridStep } from '../core/model.js'
 import {
   translate as geomTranslate,
   moveHandle as geomMoveHandle,
   scale as geomScale,
+  rotate as geomRotate,
   sample as geomSample
 } from '../core/geometry/index.js'
-import { convert, GRID_DEFAULTS } from '../core/units.js'
+import { convert } from '../core/units.js'
 
 export const project = $state(newProject())
 
-export const selection = $state({ stripId: null })
+// Multi-select: ids is the full selected set, primary is the one Strip properties
+// edits (and the one Handles are drawn for, when ids.length === 1).
+export const selection = $state({ ids: [], primary: null })
 
 // Current view centre in world units, kept up to date by Canvas.svelte on every
 // pan/zoom. "Add strip"/"Add pixels" place new geometry here instead of the origin.
@@ -27,7 +30,7 @@ export function setView(x, y) {
 export function addStrip(geomType = 'line', opts = {}) {
   const strip = newStrip(geomType, opts)
   project.strips.push(strip)
-  selection.stripId = strip.id
+  selectStrip(strip.id)
   return strip
 }
 
@@ -70,21 +73,21 @@ export function addStrips(opts) {
     created.push(strip)
   }
 
-  if (created.length) selection.stripId = created[created.length - 1].id
+  if (created.length) selectStrips(created.map((s) => s.id))
   return created
 }
 
 // "Add pixels": one points strip, N pixels in a row at the view centre.
 export function addPixelsStrip(count, spacing) {
   const n = Math.max(1, count | 0)
-  const step = spacing > 0 ? spacing : project.grid.size
+  const step = spacing > 0 ? spacing : gridStep(project)
   const startX = view.x - ((n - 1) * step) / 2
   const pts = []
   for (let i = 0; i < n; i++) pts.push({ x: startX + i * step, y: view.y })
 
   const strip = newStrip('points', { pitch: step, geom: { pts } })
   project.strips.push(strip)
-  selection.stripId = strip.id
+  selectStrip(strip.id)
   return strip
 }
 
@@ -111,11 +114,69 @@ export function removeStrip(id) {
   const i = project.strips.findIndex((s) => s.id === id)
   if (i === -1) return
   project.strips.splice(i, 1)
-  if (selection.stripId === id) selection.stripId = null
+  deselect(id)
 }
 
+// --- Selection -------------------------------------------------------------
+// selection = { ids: [], primary }. primary drives Strip properties and, when
+// it's the only selected strip, the single-strip Handles; ids drives every
+// highlight and the group bbox / rotate handle.
+
 export function selectStrip(id) {
-  selection.stripId = id
+  if (id === null || id === undefined) {
+    clearSelection()
+    return
+  }
+  selection.ids = [id]
+  selection.primary = id
+}
+
+// Replaces (or, additive, merges into) the selection -- used by the canvas
+// marquee and by "Add strip(s)"/"Add pixels" selecting what they just created.
+export function selectStrips(ids, additive = false) {
+  if (!additive) {
+    selection.ids = [...ids]
+    selection.primary = ids.length ? ids[ids.length - 1] : null
+    return
+  }
+  const set = new Set(selection.ids)
+  for (const id of ids) set.add(id)
+  selection.ids = [...set]
+  if (ids.length) selection.primary = ids[ids.length - 1]
+}
+
+// Shift/Cmd-click: adds id if absent, removes it if present.
+export function toggleSelect(id) {
+  const set = new Set(selection.ids)
+  if (set.has(id)) {
+    set.delete(id)
+    selection.ids = [...set]
+    if (selection.primary === id) selection.primary = selection.ids[selection.ids.length - 1] ?? null
+  } else {
+    set.add(id)
+    selection.ids = [...set]
+    selection.primary = id
+  }
+}
+
+export function clearSelection() {
+  selection.ids = []
+  selection.primary = null
+}
+
+function deselect(id) {
+  if (!selection.ids.includes(id)) return
+  selection.ids = selection.ids.filter((x) => x !== id)
+  if (selection.primary === id) selection.primary = selection.ids[selection.ids.length - 1] ?? null
+}
+
+// Delete/Backspace: removes every currently selected strip.
+export function removeSelected() {
+  for (const id of selection.ids) {
+    const i = project.strips.findIndex((s) => s.id === id)
+    if (i !== -1) project.strips.splice(i, 1)
+  }
+  clearSelection()
 }
 
 export function moveHandle(id, handleId, pt, opts = {}) {
@@ -128,6 +189,22 @@ export function translateStrip(id, dx, dy) {
   const strip = project.strips.find((s) => s.id === id)
   if (!strip || strip.locked) return
   strip.geom = geomTranslate(strip.geom, dx, dy)
+}
+
+// Group drag: translates every given (already-filtered-to-unlocked) strip by
+// the same delta in one call, so the canvas doesn't need a per-strip loop.
+export function translateStrips(ids, dx, dy) {
+  for (const id of ids) translateStrip(id, dx, dy)
+}
+
+// Group rotate handle: rotates every selected, unlocked strip about `center`.
+// Locked strips are skipped rather than blocking the whole gesture.
+export function rotateSelected(deg, center) {
+  for (const id of selection.ids) {
+    const strip = project.strips.find((s) => s.id === id)
+    if (!strip || strip.locked) continue
+    strip.geom = geomRotate(strip.geom, deg, center)
+  }
 }
 
 // Reorders project.strips (the array order used for export). targetIndex is an
@@ -143,7 +220,8 @@ export function reorderStrip(id, targetIndex, channel) {
 }
 
 // Converts every length in the project so the physical layout is unchanged.
-// Grid resets to a sensible step for the new unit rather than e.g. 0.3937 in.
+// Grid is divisions-based (no unit of its own), so only the world box, strip
+// geometry, and pitch need rescaling.
 export function setUnits(units) {
   const from = project.units
   if (from === units) return
@@ -152,14 +230,18 @@ export function setUnits(units) {
     strip.geom = geomScale(strip.geom, k)
     strip.pitch = round3(strip.pitch * k)
   }
-  project.canvas.w = round3(project.canvas.w * k)
-  project.canvas.h = round3(project.canvas.h * k)
-  project.grid.size = GRID_DEFAULTS[units]
+  project.world.x = round3(project.world.x * k)
+  project.world.y = round3(project.world.y * k)
+  project.world.size = round3(project.world.size * k)
   project.units = units
 }
 
 function round3(n) {
   return Math.round(n * 1000) / 1000
+}
+
+export function setExport(patch) {
+  Object.assign(project.export, patch)
 }
 
 export function setGrid(patch) {
@@ -170,6 +252,17 @@ export function toggleSnap() {
   project.grid.snap = !project.grid.snap
 }
 
-export function setCanvasSize(patch) {
-  Object.assign(project.canvas, patch)
+// World box: strips never move when the box moves or resizes.
+export function setWorld(patch) {
+  Object.assign(project.world, patch)
+}
+
+export function moveWorldOrigin(dx, dy) {
+  project.world.x += dx
+  project.world.y += dy
+}
+
+// Bottom-right corner handle: resizes with the top-left (x, y) fixed.
+export function resizeWorld(size) {
+  project.world.size = Math.max(1e-6, size)
 }

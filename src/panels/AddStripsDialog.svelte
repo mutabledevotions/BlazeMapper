@@ -9,12 +9,12 @@
   function defaults() {
     return {
       count: 1,
-      ledCount: 30,
-      pitch: +convert(1000 / 60, 'mm', project.units).toFixed(3),
+      ledCount: 10,
+      pitch: +convert(1000 / 30, 'mm', project.units).toFixed(3),
       colorType: 'RGB',
       z: 0,
       startChannel: 0,
-      channelMode: 'perStrip',
+      channelMode: 'allOne',
       placement: 'rows',
       rowSpacing: +convert(50, 'mm', project.units).toFixed(2),
       serpentine: false,
@@ -59,6 +59,16 @@
     if (v !== 'custom') form.pitch = parseFloat(v)
   }
 
+  // Keeps the preset <select> showing the matching density (e.g. "30/m") instead
+  // of always resetting to "custom" when the form's pitch already equals a preset.
+  function presetValue(pitch) {
+    for (const p of PITCH_PRESETS) {
+      const v = +convert(p.pitchMm, 'mm', project.units).toFixed(3)
+      if (Math.abs(v - pitch) < 1e-6) return String(v)
+    }
+    return 'custom'
+  }
+
   function submit(evt) {
     evt.preventDefault()
     addStrips({ ...form })
@@ -81,7 +91,7 @@
       </label>
       <label title="Common LED strip densities, converted to the project's units.">
         Pitch preset
-        <select onchange={onPitchPreset}>
+        <select value={presetValue(form.pitch)} onchange={onPitchPreset}>
           <option value="custom">custom</option>
           {#each PITCH_PRESETS as p}
             <option value={+convert(p.pitchMm, 'mm', project.units).toFixed(3)}>{p.perMetre}/m</option>
@@ -103,8 +113,8 @@
         Z
         <input type="number" step="1" bind:value={form.z} />
       </label>
-      <label title="The first strip's Output Expander channel (0-63).">
-        Start channel
+      <label title="Output Expander channel (0-7 per board) for the first strip; with one channel per strip, later strips use the next channels.">
+        Output Expander Channel
         <input type="number" min="0" max="63" bind:value={form.startChannel} />
       </label>
       <label>

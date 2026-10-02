@@ -1,14 +1,15 @@
 <script>
   // Small dialog: N standalone pixels, laid out in a row at the view centre.
   import { addPixelsStrip, project } from '../state/project.svelte.js'
+  import { gridStep } from '../core/model.js'
 
   let dialogEl
   let count = $state(10)
-  let spacing = $state(project.grid.size)
+  let spacing = $state(gridStep(project))
 
   export function open() {
     count = 10
-    spacing = project.grid.size
+    spacing = gridStep(project)
     dialogEl.showModal()
   }
 

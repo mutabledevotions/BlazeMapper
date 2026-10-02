@@ -1,5 +1,6 @@
 <script>
-  import { project, setGrid, setUnits, toggleSnap, setCanvasSize } from '../state/project.svelte.js'
+  import { project, setGrid, setUnits, toggleSnap, setWorld } from '../state/project.svelte.js'
+  import { gridStep } from '../core/model.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
 
@@ -29,33 +30,43 @@
     Grid
   </label>
 
-  <label class="num">
-    Grid size
-    <input
-      type="number"
-      min="0.1"
-      step="1"
-      value={project.grid.size}
-      onchange={(e) => setGrid({ size: parseFloat(e.target.value) || 1 })}
-    />
-  </label>
-
-  <span class="sep"></span>
-
-  <label class="num" title="Physical canvas bounds, e.g. a 2m x 2m costume or a 200m x 20m stage. Drawn as the dashed boundary rect; press F to fit the view to it.">
-    Canvas
+  <label class="num" title="Grid lines per world-box edge. Snap step = world size / divisions.">
+    Grid divisions
     <input
       type="number"
       min="1"
-      value={project.canvas.w}
-      onchange={(e) => setCanvasSize({ w: parseFloat(e.target.value) || 1 })}
+      step="1"
+      value={project.grid.divisions}
+      onchange={(e) => setGrid({ divisions: Math.max(1, parseInt(e.target.value) || 1) })}
+    />
+  </label>
+  <span class="grid-step">({+gridStep(project).toFixed(3)} {project.units}/div)</span>
+
+  <span class="sep"></span>
+
+  <label class="num" title="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage (set width via height on a non-square run). Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it.">
+    World
+    <input
+      type="number"
+      min="1"
+      value={project.world.x}
+      onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
+      title="World origin X"
+    />
+    <input
+      type="number"
+      min="1"
+      value={project.world.y}
+      onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
+      title="World origin Y"
     />
     &times;
     <input
       type="number"
-      min="1"
-      value={project.canvas.h}
-      onchange={(e) => setCanvasSize({ h: parseFloat(e.target.value) || 1 })}
+      min="0.001"
+      value={project.world.size}
+      onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
+      title="World box size (square)"
     />
   </label>
 
@@ -86,6 +97,10 @@
     width: 1px;
     align-self: stretch;
     background: var(--border);
+  }
+  .grid-step {
+    font-size: 0.78rem;
+    color: var(--muted);
   }
   .chk,
   .num {

@@ -2,7 +2,7 @@
   // Collapsible bottom drawer (replaces the old right-sidebar export panel).
   // Header bar (pixel count, warnings badge, Copy) stays visible when collapsed.
   // Resizable by dragging the top edge.
-  import { project } from '../state/project.svelte.js'
+  import { project, setExport } from '../state/project.svelte.js'
   import { computePixels } from '../core/layout.js'
   import { toMapJSON, channelSummary } from '../core/export.js'
   import { validateProject } from '../core/validate.js'
@@ -10,7 +10,7 @@
   const LIMITS = { RGB: 240, RGBW: 180 }
 
   const pixels = $derived(computePixels(project))
-  const mapJSON = $derived(toMapJSON(pixels, project.export))
+  const mapJSON = $derived(toMapJSON(pixels, { ...project.export, world: project.world }))
   const summary = $derived(channelSummary(pixels))
   const warnings = $derived(validateProject(project))
   const hasError = $derived(warnings.some((w) => w.level === 'error'))
@@ -81,7 +81,21 @@
 
   {#if !collapsed}
     <div class="body">
-      <textarea bind:this={textareaEl} readonly>{mapJSON}</textarea>
+      <div class="main">
+        <textarea bind:this={textareaEl} readonly>{mapJSON}</textarea>
+        <p class="hint">
+          Coordinates are normalized to the world box (0..1). Pixelblaze still rescales the map itself (Fill or Contain) --
+          use <strong>Contain</strong> in the Mapper tab to keep the world box's aspect ratio instead of stretching it.
+        </p>
+        <label class="chk" title="Experimental, untested on real hardware: appends the world box's own [0,0] and [1,1] corners to the map so Pixelblaze's Fill/Contain normalization can't shift or shrink the layout. Not counted in the pixel total or channel summary.">
+          <input
+            type="checkbox"
+            checked={project.export.anchors}
+            onchange={(e) => setExport({ anchors: e.target.checked })}
+          />
+          Anchor world corners (experimental)
+        </label>
+      </div>
 
       <div class="side">
         <table class="summary">
@@ -184,8 +198,15 @@
     padding: 0.5rem 0.75rem;
     min-height: 0;
   }
-  textarea {
+  .main {
     flex: 1.3;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-height: 0;
+  }
+  textarea {
+    flex: 1;
     box-sizing: border-box;
     resize: none;
     font-family: ui-monospace, monospace;
@@ -195,6 +216,18 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.5rem;
+  }
+  .main .hint {
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin: 0;
+  }
+  .main .chk {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--fg);
   }
   .side {
     flex: 1;

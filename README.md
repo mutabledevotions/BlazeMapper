@@ -23,9 +23,13 @@ In dev builds, `window.pm = { store, core }` is exposed in the browser console f
 - `Alt` (held during a drag) — temporarily inverts snap for that drag.
 - `Shift` (held while dragging the end handle) — snaps the angle to 15° steps.
 - `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
-- `F` — fit the view to the canvas boundary plus every strip's bounding box.
+- `F` — fit the view to the world box plus every strip's bounding box.
 - `Space` + drag, or middle-mouse drag — pan the canvas.
 - Mouse wheel — zoom, anchored at the cursor.
+- Click a strip — select it. `Shift`/`Cmd`-click a strip (on the canvas or in the strip list) — add or remove it from the selection.
+- Left-drag on empty canvas — marquee-select every strip with at least one LED inside the rect; `Shift`/`Cmd` adds to the existing selection instead of replacing it.
+- `Esc` — clear the selection. `Delete`/`Backspace` — remove every selected strip. Both ignored while a text field, select, or textarea has focus.
+- With 2+ strips selected, drag the handle above the dashed group bbox to rotate the whole selection about its center (0.5° steps, `Shift` = 15°). Locked strips are skipped.
 
 ## Pixelblaze map facts this tool relies on
 
@@ -54,6 +58,14 @@ In dev builds, `window.pm = { store, core }` is exposed in the browser console f
 - **Export as a bottom drawer.** The export panel moved out of the right sidebar into a collapsible, resizable (drag its top edge) bottom drawer. Its header — pixel count, a warnings badge, and Copy — stays visible even when the drawer is collapsed.
 - **Tooltips** on the Z, pitch, channel, color type, reversed, and spacing fields explain what each one does and how it affects export.
 - No undo, no persistence of the project itself, no reference image, and curves/shapes are still Phase 5 — see the roadmap below.
+
+## Phase 2b (this build)
+
+- **World box replaces canvas size.** `project.world = { x, y, size }` is a square in project units (default 0, 0, 2000 mm), drawn solid with a label. Drag its border or label to move the origin, or its bottom-right corner handle to resize (top-left stays fixed). Strips never move when the world box moves or resizes — it's purely the frame the export normalizes against.
+- **Grid from the world box.** `project.grid.divisions` (default 20) gives a grid step of `world.size / divisions`, anchored at the world origin so grid lines always meet the box's edges. Snap uses this same step. The toolbar's "Grid divisions" field shows the derived step.
+- **Normalized export.** Every exported coordinate is `(p - world.origin) / world.size` (z divided by `world.size`), rounded to 4 decimals by default. Since units are only labels, the export is identical whether the project is drawn in mm, in, or px. A pixel that falls outside the world box triggers an "outside the world box" warning in the export drawer. Pixelblaze still rescales the whole map to its own bounds (Fill or Contain) before rendering, so the drawer notes using **Contain** to keep the world box's aspect ratio instead of stretching it. An experimental "Anchor world corners" checkbox (`project.export.anchors`, off by default, untested on real hardware) appends the normalized `[0,0]` and `[1,1]` corners to the map — these are never counted in the pixel total or channel summary.
+- **Multi-select.** `selection = { ids, primary }`. Click a strip (canvas or strip list) to select it; `Shift`/`Cmd`-click toggles it into or out of the selection. Left-drag on empty canvas draws a marquee that selects every strip with at least one sampled LED inside it (`Shift`/`Cmd` adds instead of replacing). `Esc` clears the selection, `Delete`/`Backspace` removes every selected strip (both ignored while typing in a field). Dragging any selected strip moves the whole selection by the same snapped delta; dragging an unselected strip selects just that one (or toggles it with Shift) and drags only it. With 2+ strips selected, a dashed group bounding box appears with a rotate handle above its top-centre that rotates the whole selection about the bbox centre (0.5° steps, `Shift` = 15°) — locked strips are skipped. Strip properties shows the primary strip's fields, or "N strips selected" when more than one is selected.
+- **Geometry registry gains `rotate`.** Every geometry type (`line`, `points`) now implements `rotate(geom, deg, center)` alongside `sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`, so layout/export still never special-case shape type.
 
 ## Roadmap
 

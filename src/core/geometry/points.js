@@ -29,6 +29,21 @@ export function scale(geom, k) {
   return { ...geom, pts: geom.pts.map((p) => ({ x: p.x * k, y: p.y * k })) }
 }
 
+// Rotates every point about `center`, in degrees.
+export function rotate(geom, deg, center) {
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return {
+    ...geom,
+    pts: geom.pts.map((p) => {
+      const dx = p.x - center.x
+      const dy = p.y - center.y
+      return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos }
+    })
+  }
+}
+
 export function bbox(geom) {
   if (geom.pts.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
   let minX = Infinity

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { newProject, newStrip } from '../src/core/model.js'
-import { sample, handles, moveHandle, translate, scale, bbox } from '../src/core/geometry/index.js'
+import { sample, handles, moveHandle, translate, scale, bbox, rotate } from '../src/core/geometry/index.js'
 import { computePixels, projectBbox } from '../src/core/layout.js'
 import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
@@ -87,25 +87,49 @@ describe('layout computePixels', () => {
 })
 
 describe('export', () => {
-  it('formats map JSON without z when all z are zero', () => {
+  it('normalizes to (p - world.origin) / world.size, without z when all z are zero', () => {
     const pixels = [
       { x: 0, y: 0, z: 0 },
-      { x: 10, y: 5, z: 0 }
+      { x: 50, y: 100, z: 0 }
     ]
-    expect(toMapJSON(pixels, { round: 2 })).toBe('[[0,0],[10,5]]')
+    const world = { x: 0, y: 0, size: 200 }
+    expect(toMapJSON(pixels, { world, decimals: 2 })).toBe('[[0,0],[0.25,0.5]]')
   })
 
-  it('includes z when any pixel has non-zero z', () => {
+  it('applies the world origin offset before normalizing', () => {
+    const pixels = [{ x: 110, y: 60, z: 0 }]
+    const world = { x: 10, y: 10, size: 100 }
+    expect(toMapJSON(pixels, { world, decimals: 2 })).toBe('[[1,0.5]]')
+  })
+
+  it('normalizes z by world.size too, and includes it when any pixel has non-zero z', () => {
     const pixels = [
       { x: 0, y: 0, z: 0 },
-      { x: 10, y: 5, z: 3 }
+      { x: 50, y: 50, z: 25 }
     ]
-    expect(toMapJSON(pixels, { round: 2 })).toBe('[[0,0,0],[10,5,3]]')
+    const world = { x: 0, y: 0, size: 100 }
+    expect(toMapJSON(pixels, { world, decimals: 2 })).toBe('[[0,0,0],[0.5,0.5,0.25]]')
   })
 
   it('forces z when forceZ is set', () => {
-    const pixels = [{ x: 1, y: 2, z: 0 }]
-    expect(toMapJSON(pixels, { round: 2, forceZ: true })).toBe('[[1,2,0]]')
+    const pixels = [{ x: 10, y: 20, z: 0 }]
+    const world = { x: 0, y: 0, size: 100 }
+    expect(toMapJSON(pixels, { world, decimals: 2, forceZ: true })).toBe('[[0.1,0.2,0]]')
+  })
+
+  it('rounds to 4 decimals by default', () => {
+    const pixels = [{ x: 1, y: 1, z: 0 }]
+    const world = { x: 0, y: 0, size: 3 }
+    expect(toMapJSON(pixels, { world })).toBe('[[0.3333,0.3333]]')
+  })
+
+  it('appends anchor corners when requested, outside the pixel total / channel summary', () => {
+    const pixels = [{ x: 10, y: 10, z: 0, channel: 0, colorType: 'RGB', global: 0 }]
+    const world = { x: 0, y: 0, size: 100 }
+    const json = toMapJSON(pixels, { world, decimals: 2, anchors: true })
+    expect(json).toBe('[[0.1,0.1],[0,0],[1,1]]')
+    expect(pixels.length).toBe(1)
+    expect(channelSummary(pixels)).toEqual([{ channel: 0, colorType: 'RGB', start: 0, count: 1 }])
   })
 
   it('summarizes contiguous channel runs', () => {
@@ -118,6 +142,25 @@ describe('export', () => {
       { channel: 0, colorType: 'RGB', start: 0, count: 2 },
       { channel: 1, colorType: 'RGBW', start: 2, count: 1 }
     ])
+  })
+})
+
+describe('geometry rotate', () => {
+  it('line: rotates p0 about a center and adds to angle (quantized)', () => {
+    const geom = { type: 'line', p0: { x: 10, y: 0 }, angle: 0, p1: null }
+    const next = rotate(geom, 90, { x: 0, y: 0 })
+    expect(next.p0.x).toBeCloseTo(0)
+    expect(next.p0.y).toBeCloseTo(10)
+    expect(next.angle).toBe(90)
+  })
+
+  it('points: rotates every point about a center', () => {
+    const geom = { type: 'points', pts: [{ x: 10, y: 0 }, { x: 0, y: 10 }] }
+    const next = rotate(geom, 90, { x: 0, y: 0 })
+    expect(next.pts[0].x).toBeCloseTo(0)
+    expect(next.pts[0].y).toBeCloseTo(10)
+    expect(next.pts[1].x).toBeCloseTo(-10)
+    expect(next.pts[1].y).toBeCloseTo(0)
   })
 })
 
@@ -203,6 +246,22 @@ describe('validate', () => {
     const project = newProject()
     project.strips.push(newStrip('line', { ledCount: 10, pitch: 10, channel: 0 }))
     expect(validateProject(project)).toEqual([])
+  })
+
+  it('flags a strip with a pixel outside the world box (0..1 normalized)', () => {
+    const project = newProject()
+    project.world = { x: 0, y: 0, size: 100 }
+    project.strips.push(newStrip('line', { ledCount: 2, pitch: 10, geom: { p0: { x: 95, y: 0 }, angle: 0 } }))
+    const warnings = validateProject(project)
+    expect(warnings.some((w) => /outside the world box/.test(w.message))).toBe(true)
+  })
+
+  it('does not flag a strip fully inside the world box', () => {
+    const project = newProject()
+    project.world = { x: 0, y: 0, size: 100 }
+    project.strips.push(newStrip('line', { ledCount: 2, pitch: 10, geom: { p0: { x: 0, y: 0 }, angle: 0 } }))
+    const warnings = validateProject(project)
+    expect(warnings.some((w) => /outside the world box/.test(w.message))).toBe(false)
   })
 })
 
