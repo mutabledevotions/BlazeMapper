@@ -6,11 +6,17 @@
 import * as line from './line.js'
 import * as points from './points.js'
 import * as bezier from './bezier.js'
+import * as arc from './arc.js'
+import * as circle from './circle.js'
+import * as polygon from './polygon.js'
 
 const REGISTRY = {
   line,
   points,
-  bezier
+  bezier,
+  arc,
+  circle,
+  polygon
 }
 
 function impl(geom) {
@@ -59,6 +65,14 @@ export function mirror(geom, axis, center) {
 // origin and leaves pitch/ledCount/angle alone), so it doesn't go through here.
 export function scaleAbout(geom, k, center) {
   return impl(geom).scaleAbout(geom, k, center)
+}
+
+// Total path length (StripProps' "Curve length" readout) for geometries that
+// implement it (bezier, arc, circle, polygon); null for ones that don't
+// (line, points -- which have no single "length" independent of LED count).
+export function curveLength(geom) {
+  const g = impl(geom)
+  return typeof g.curveLength === 'function' ? g.curveLength(geom) : null
 }
 
 export function registerGeometry(type, implementation) {

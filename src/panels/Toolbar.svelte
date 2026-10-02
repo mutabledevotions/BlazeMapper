@@ -43,7 +43,7 @@
 <div class="toolbar">
   <button onclick={() => stripsDialog.open('line')}>Add strip</button>
   <button onclick={() => pixelsDialog.open()}>Add pixels</button>
-  <button disabled title="Phase 5">Add shape</button>
+  <button title="Add an arc, circle, or polygon strip" onclick={() => stripsDialog.open('shape')}>Add shape</button>
   <button title="Add a cubic bezier strip" onclick={() => stripsDialog.open('bezier')}>Add Bezier</button>
   <button title="Reference image: load, position, opacity, calibrate" onclick={() => imagePanel.toggle()}>Reference image</button>
 

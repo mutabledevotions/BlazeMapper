@@ -1,6 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { newProject, newStrip } from '../src/core/model.js'
-import { sample, handles, moveHandle, translate, scale, bbox, rotate, mirror, scaleAbout } from '../src/core/geometry/index.js'
+import {
+  sample,
+  handles,
+  moveHandle,
+  translate,
+  scale,
+  bbox,
+  rotate,
+  mirror,
+  scaleAbout,
+  curveLength as registryCurveLength
+} from '../src/core/geometry/index.js'
+import { curveLength as arcCurveLength } from '../src/core/geometry/arc.js'
+import { curveLength as circleCurveLength } from '../src/core/geometry/circle.js'
+import { curveLength as polygonCurveLength } from '../src/core/geometry/polygon.js'
 import { computePixels, projectBbox } from '../src/core/layout.js'
 import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
@@ -1076,5 +1090,335 @@ describe('core/geometry/bezier', () => {
     expect(pixels[0]).toMatchObject({ x: 0, y: 0, channel: 0, gap: false })
     expect(pixels[5]).toMatchObject({ x: 60, y: 0, channel: 0, gap: false })
     expect(pixels.map((p) => p.global)).toEqual([0, 1, 2, 3, 4, 5])
+  })
+})
+
+describe('core/geometry/arc', () => {
+  function quarterArc() {
+    // Quarter circle, radius 100, from 0deg to 90deg (sweep 90).
+    return { type: 'arc', center: { x: 0, y: 0 }, radius: 100, startAngle: 0, sweep: 90 }
+  }
+
+  it('pitch mode spaces consecutive LEDs within 2% of the strip pitch', () => {
+    const geom = quarterArc()
+    const strip = { ledCount: 12, pitch: 10, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(12)
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      expect(Math.abs(d - strip.pitch) / strip.pitch).toBeLessThan(0.02)
+    }
+  })
+
+  it('pitch mode continues past the arc end along the end tangent', () => {
+    const geom = quarterArc() // length = 100 * pi/2 ~= 157.08
+    const strip = { ledCount: 20, pitch: 10, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    const end = { x: geom.center.x + geom.radius * Math.cos(Math.PI / 2), y: geom.center.y + geom.radius * Math.sin(Math.PI / 2) }
+    const last = pts[pts.length - 1]
+    // Past the arc (length ~157), later LEDs keep even ~10-unit spacing.
+    const d = Math.hypot(last.x - pts[pts.length - 2].x, last.y - pts[pts.length - 2].y)
+    expect(d).toBeCloseTo(10, 1)
+    // The end tangent at 90deg (increasing-angle travel) points in -x, so
+    // extrapolated LEDs continue in a straight line off to -x at y ~= end.y.
+    expect(last.x).toBeLessThan(end.x)
+    expect(last.y).toBeCloseTo(end.y, 0)
+  })
+
+  it('fit mode places the first and last LED exactly at the arc endpoints', () => {
+    const geom = quarterArc()
+    const strip = { ledCount: 8, spacing: 'fit' }
+    const pts = sample(geom, strip)
+    expect(pts[0].x).toBeCloseTo(100, 6)
+    expect(pts[0].y).toBeCloseTo(0, 6)
+    expect(pts[pts.length - 1].x).toBeCloseTo(0, 6)
+    expect(pts[pts.length - 1].y).toBeCloseTo(100, 6)
+  })
+
+  it('exposes center/start/sweep handles', () => {
+    const geom = quarterArc()
+    expect(handles(geom, {}).map((h) => h.id)).toEqual(['center', 'start', 'sweep'])
+  })
+
+  it('moving the center handle translates the whole arc', () => {
+    const geom = quarterArc()
+    const patch = moveHandle(geom, 'center', { x: 10, y: -10 }, {})
+    expect(patch.geom.center).toEqual({ x: 10, y: -10 })
+    expect(patch.geom.radius).toBe(100)
+    expect(patch.geom.sweep).toBe(90)
+  })
+
+  it('moving the start handle changes radius and start angle, not sweep', () => {
+    const geom = quarterArc()
+    const patch = moveHandle(geom, 'start', { x: 0, y: 50 }, {})
+    expect(patch.geom.radius).toBeCloseTo(50, 6)
+    expect(patch.geom.startAngle).toBeCloseTo(90, 1)
+    expect(patch.geom.sweep).toBe(90)
+  })
+
+  it('moving the sweep handle changes only sweep, shift-snapping to 15 degrees', () => {
+    const geom = quarterArc()
+    // Drag to straight down (+y from center) -- that's 90deg from start (0deg),
+    // but nudge it off so a non-snapped drag would not land on a 15deg step.
+    const patch = moveHandle(geom, 'sweep', { x: -5, y: 100 }, { shiftSnap: true })
+    expect(patch.geom.radius).toBe(100)
+    expect(patch.geom.startAngle).toBe(0)
+    expect(Math.round(patch.geom.sweep * 2) % 15).toBe(0)
+  })
+
+  it('translate moves only the center; rotate/mirror/scaleAbout behave as documented', () => {
+    const geom = quarterArc()
+    const moved = translate(geom, 5, -5)
+    expect(moved.center).toEqual({ x: 5, y: -5 })
+    expect(moved.radius).toBe(100)
+
+    const rotated = rotate(geom, 90, { x: 0, y: 0 })
+    expect(rotated.center.x).toBeCloseTo(0, 6)
+    expect(rotated.center.y).toBeCloseTo(0, 6)
+    expect(rotated.startAngle).toBeCloseTo(90, 1)
+
+    const mirroredH = mirror(geom, 'h', { x: 0, y: 0 })
+    expect(mirroredH.sweep).toBe(-90)
+
+    const scaled = scaleAbout(geom, 2, { x: 0, y: 0 })
+    expect(scaled.radius).toBe(200)
+  })
+
+  it('scale(k) scales center and radius about the origin', () => {
+    const geom = { type: 'arc', center: { x: 10, y: 0 }, radius: 50, startAngle: 0, sweep: 90 }
+    const scaled = scale(geom, 2)
+    expect(scaled.center).toEqual({ x: 20, y: 0 })
+    expect(scaled.radius).toBe(100)
+  })
+
+  it('curveLength() is radius * |sweep in radians| -- matches both the module export and the registry', () => {
+    const geom = quarterArc()
+    const expected = 100 * (Math.PI / 2)
+    expect(arcCurveLength(geom)).toBeCloseTo(expected, 6)
+    expect(registryCurveLength(geom)).toBeCloseTo(expected, 6)
+  })
+
+  it('newStrip sizes a default arc so its arc length is roughly (ledCount-1)*pitch', () => {
+    const strip = newStrip('arc', { ledCount: 11, pitch: 10, geom: { center: { x: 0, y: 0 } } })
+    expect(arcCurveLength(strip.geom)).toBeCloseTo(100, 4)
+  })
+
+  it('layout.computePixels works with an arc strip', () => {
+    const project = newProject()
+    const strip = newStrip('arc', {
+      ledCount: 8,
+      pitch: 10,
+      channel: 2,
+      spacing: 'fit',
+      geom: { center: { x: 0, y: 0 }, radius: 100, startAngle: 0, sweep: 90 }
+    })
+    strip.start = 1
+    project.strips.push(strip)
+    const pixels = computePixels(project)
+    expect(pixels.length).toBe(8)
+    expect(pixels[0]).toMatchObject({ x: 100, y: 0, channel: 2, gap: false })
+    expect(pixels[7].x).toBeCloseTo(0, 6)
+    expect(pixels[7].y).toBeCloseTo(100, 6)
+  })
+})
+
+describe('core/geometry/circle', () => {
+  function unitCircle(radius = 100) {
+    return { type: 'circle', center: { x: 0, y: 0 }, radius, startAngle: 0, direction: 1 }
+  }
+
+  it('pitch mode spaces consecutive LEDs within 2% of the strip pitch', () => {
+    const geom = unitCircle()
+    const pitch = (2 * Math.PI * 100) / 20 // circumference / 20, so 20 LEDs wrap exactly once
+    const strip = { ledCount: 20, pitch, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(20)
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      expect(Math.abs(d - pitch) / pitch).toBeLessThan(0.02)
+    }
+  })
+
+  it('pitch mode wraps around instead of extrapolating once LEDs exceed the circumference', () => {
+    const geom = unitCircle()
+    const circumference = 2 * Math.PI * 100
+    const pitch = circumference / 10
+    // ledCount of 25 wraps the loop 2.5 times -- every point must still sit on the circle.
+    const strip = { ledCount: 25, pitch, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    for (const p of pts) {
+      expect(Math.hypot(p.x, p.y)).toBeCloseTo(100, 1)
+    }
+  })
+
+  it('fit mode places ledCount LEDs evenly around without duplicating the start point', () => {
+    const geom = unitCircle()
+    const strip = { ledCount: 12, spacing: 'fit' }
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(12)
+    expect(pts[0].x).toBeCloseTo(100, 6)
+    expect(pts[0].y).toBeCloseTo(0, 6)
+    // The 12th point must NOT coincide with the first (no duplicated start).
+    const last = pts[11]
+    expect(Math.hypot(last.x - pts[0].x, last.y - pts[0].y)).toBeGreaterThan(1)
+    // Evenly spaced: consecutive points are each ~30deg apart (360/12), within
+    // the arc-length table's own sampling resolution (256 samples/turn).
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      const expected = 2 * 100 * Math.sin(Math.PI / 12)
+      expect(Math.abs(d - expected) / expected).toBeLessThan(0.01)
+    }
+  })
+
+  it('exposes center/start handles', () => {
+    expect(handles(unitCircle(), {}).map((h) => h.id)).toEqual(['center', 'start'])
+  })
+
+  it('moving the start handle changes radius and start angle', () => {
+    const geom = unitCircle()
+    const patch = moveHandle(geom, 'start', { x: 0, y: 50 }, {})
+    expect(patch.geom.radius).toBeCloseTo(50, 6)
+    expect(patch.geom.startAngle).toBeCloseTo(90, 1)
+  })
+
+  it('rotate/mirror/scaleAbout transform center, angle, and direction as documented', () => {
+    const geom = unitCircle()
+    const center = { x: 0, y: 0 }
+
+    const rotated = rotate(geom, 90, center)
+    expect(rotated.startAngle).toBeCloseTo(90, 1)
+
+    const mirroredH = mirror(geom, 'h', center)
+    expect(mirroredH.direction).toBe(-1)
+
+    const scaled = scaleAbout(geom, 2, center)
+    expect(scaled.radius).toBe(200)
+  })
+
+  it('curveLength() is 2*pi*radius -- matches both the module export and the registry', () => {
+    const geom = unitCircle(100)
+    expect(circleCurveLength(geom)).toBeCloseTo(2 * Math.PI * 100, 6)
+    expect(registryCurveLength(geom)).toBeCloseTo(2 * Math.PI * 100, 6)
+  })
+
+  it('newStrip sizes a default circle so its circumference is roughly ledCount*pitch', () => {
+    const strip = newStrip('circle', { ledCount: 20, pitch: 10, geom: { center: { x: 0, y: 0 } } })
+    expect(circleCurveLength(strip.geom)).toBeCloseTo(200, 4)
+  })
+
+  it('layout.computePixels works with a circle strip (closed, no duplicated start)', () => {
+    const project = newProject()
+    const strip = newStrip('circle', {
+      ledCount: 10,
+      pitch: 10,
+      channel: 1,
+      spacing: 'fit',
+      geom: { center: { x: 0, y: 0 }, radius: 100, startAngle: 0, direction: 1 }
+    })
+    strip.start = 1
+    project.strips.push(strip)
+    const pixels = computePixels(project)
+    expect(pixels.length).toBe(10)
+    expect(pixels[0]).toMatchObject({ x: 100, y: 0, channel: 1, gap: false })
+    // No pixel duplicates pixel 0's coordinate (closed loop, no repeated start).
+    for (let i = 1; i < pixels.length; i++) {
+      expect(Math.hypot(pixels[i].x - pixels[0].x, pixels[i].y - pixels[0].y)).toBeGreaterThan(1)
+    }
+  })
+})
+
+describe('core/geometry/polygon', () => {
+  function triangle(radius = 100) {
+    return { type: 'polygon', center: { x: 0, y: 0 }, radius, sides: 3, rotation: 0 }
+  }
+
+  it('pitch mode spaces consecutive LEDs within 2% of the strip pitch', () => {
+    const geom = triangle()
+    const perimeter = 3 * 2 * 100 * Math.sin(Math.PI / 3)
+    const pitch = perimeter / 21 // wraps exactly once over 21 LEDs
+    const strip = { ledCount: 21, pitch, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(21)
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      expect(Math.abs(d - pitch) / pitch).toBeLessThan(0.02)
+    }
+  })
+
+  it('fit mode places ledCount LEDs evenly along the perimeter without duplicating the start point', () => {
+    const geom = triangle()
+    const strip = { ledCount: 9, spacing: 'fit' } // 3 per side, exactly
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(9)
+    const last = pts[8]
+    expect(Math.hypot(last.x - pts[0].x, last.y - pts[0].y)).toBeGreaterThan(1)
+  })
+
+  it('a square (4 sides) places LEDs along its 4 straight edges, not a circle', () => {
+    const geom = { type: 'polygon', center: { x: 0, y: 0 }, radius: 100, sides: 4, rotation: 0 }
+    const strip = { ledCount: 8, spacing: 'fit' } // 2 per edge
+    const pts = sample(geom, strip)
+    // Every sampled point must sit on the square's bounding box edge (|x| or |y| == radius*cos(45)),
+    // not at radius distance from the center (which an arc-based sampling would produce instead).
+    const vertexDist = 100 // the square's own vertices sit at exactly radius 100
+    const onBoxEdge = pts.every((p) => Math.abs(p.x) < vertexDist + 1e-6 && Math.abs(p.y) < vertexDist + 1e-6)
+    expect(onBoxEdge).toBe(true)
+  })
+
+  it('exposes center/vertex0 handles', () => {
+    expect(handles(triangle(), {}).map((h) => h.id)).toEqual(['center', 'vertex0'])
+  })
+
+  it('moving the vertex0 handle changes radius and rotation', () => {
+    const geom = triangle()
+    const patch = moveHandle(geom, 'vertex0', { x: 0, y: 50 }, {})
+    expect(patch.geom.radius).toBeCloseTo(50, 6)
+    expect(patch.geom.rotation).toBeCloseTo(90, 1)
+  })
+
+  it('rotate/mirror/scaleAbout transform center, rotation, and radius as documented', () => {
+    const geom = triangle()
+    const center = { x: 0, y: 0 }
+
+    const rotated = rotate(geom, 90, center)
+    expect(rotated.rotation).toBeCloseTo(90, 1)
+
+    const mirroredH = mirror(geom, 'h', center)
+    expect(mirroredH.rotation).toBeCloseTo(180, 1)
+
+    const scaled = scaleAbout(geom, 2, center)
+    expect(scaled.radius).toBe(200)
+  })
+
+  it('curveLength() is the exact perimeter -- matches both the module export and the registry', () => {
+    const geom = triangle(100)
+    const expected = 3 * 2 * 100 * Math.sin(Math.PI / 3)
+    expect(polygonCurveLength(geom)).toBeCloseTo(expected, 6)
+    expect(registryCurveLength(geom)).toBeCloseTo(expected, 6)
+  })
+
+  it('newStrip sizes a default polygon so its perimeter is roughly ledCount*pitch', () => {
+    const strip = newStrip('polygon', { ledCount: 15, pitch: 10, geom: { center: { x: 0, y: 0 } } })
+    expect(polygonCurveLength(strip.geom)).toBeCloseTo(150, 4)
+    expect(strip.geom.sides).toBe(3)
+  })
+
+  it('layout.computePixels works with a polygon strip (closed, no duplicated start)', () => {
+    const project = newProject()
+    const strip = newStrip('polygon', {
+      ledCount: 9,
+      pitch: 10,
+      channel: 3,
+      spacing: 'fit',
+      geom: { center: { x: 0, y: 0 }, radius: 100, sides: 3, rotation: 0 }
+    })
+    strip.start = 1
+    project.strips.push(strip)
+    const pixels = computePixels(project)
+    expect(pixels.length).toBe(9)
+    expect(pixels[0]).toMatchObject({ x: 100, y: 0, channel: 3, gap: false })
+    for (let i = 1; i < pixels.length; i++) {
+      expect(Math.hypot(pixels[i].x - pixels[0].x, pixels[i].y - pixels[0].y)).toBeGreaterThan(1)
+    }
   })
 })

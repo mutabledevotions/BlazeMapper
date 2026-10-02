@@ -1,5 +1,5 @@
-// Arc-length helpers shared by every curved geometry (bezier now; arc/circle/
-// polygon later -- phase 5 continues to add shapes). Pure math, no DOM/Svelte.
+// Arc-length helpers shared by every curved geometry (bezier, arc, circle,
+// polygon -- phase 5). Pure math, no DOM/Svelte.
 //
 // A curve is any function f(t) -> {x, y} for t in [0, 1]. Since most curves
 // have no closed-form arc length, this builds a piecewise-linear lookup table
@@ -82,6 +82,46 @@ export function sampleByFit(f, count, opts = {}) {
   const points = []
   for (let i = 0; i < n; i++) {
     const s = n > 1 ? (table.total * i) / (n - 1) : 0
+    points.push(pointAtLength(table, s))
+  }
+  return { points, length: table.total, table }
+}
+
+// --- Closed curves (circle, polygon) ---------------------------------------
+// A closed curve's `f(t)` traces the whole loop once for t in [0, 1), with
+// f(0) and f(1) the same point. Neither of the open-path helpers above fits
+// it: pitch mode has no "past the end" to extrapolate past (the path just
+// keeps going around again), and fit mode must not place a point at both t=0
+// and t=1 (that would duplicate the start point).
+
+// Pitch mode on a closed curve: LED i sits at arc length (i * pitch) mod the
+// curve's total length (its perimeter/circumference) -- i.e. once the strip's
+// own length exceeds the loop, it just keeps wrapping around instead of
+// extrapolating in a straight line (there is no straight "past the end" on a
+// loop). Callers (StripProps) separately warn when ledCount * pitch exceeds
+// the perimeter, since that's a UI concern, not a math one.
+export function sampleByPitchClosed(f, pitch, count, opts = {}) {
+  const table = buildArcLengthTable(f, opts.samples)
+  const n = Math.max(0, count | 0)
+  const step = pitch > 0 ? pitch : 1e-6
+  const total = table.total > 0 ? table.total : 1e-9
+  const points = []
+  for (let i = 0; i < n; i++) {
+    const s = (i * step) % total
+    points.push(pointAtLength(table, s))
+  }
+  return { points, length: table.total, table }
+}
+
+// Fit mode on a closed curve: `count` points evenly spread around the full
+// loop without duplicating the start point (the open-path version's last
+// point sits at t=1, which on a loop is the same point as t=0).
+export function sampleByFitClosed(f, count, opts = {}) {
+  const table = buildArcLengthTable(f, opts.samples)
+  const n = Math.max(0, count | 0)
+  const points = []
+  for (let i = 0; i < n; i++) {
+    const s = (table.total * i) / n
     points.push(pointAtLength(table, s))
   }
   return { points, length: table.total, table }

@@ -196,17 +196,22 @@ export function addStrip(geomType = 'line', opts = {}) {
   return strip
 }
 
+// Geometry types that always place "stacked" (each strip offset from the view
+// centre), since phase 5 only asked for that one placement mode for curves;
+// rows/matrix/serpentine stay line-only.
+const STACKED_GEOM_TYPES = ['bezier', 'arc', 'circle', 'polygon']
+
 // Batch placement for AddStripsDialog. opts:
 //   count, ledCount, pitch, colorType, z, startChannel, channelMode: 'perStrip' | 'allOne'
 //   placement: 'rows' | 'matrix' | 'stacked', rowSpacing, serpentine, offset
-//   geomType: 'line' (default) | 'bezier' -- bezier always places "stacked"
-//   (each strip offset from the view centre), since phase 5 only asked for
-//   that one placement mode for curves; rows/matrix/serpentine stay line-only.
+//   geomType: 'line' (default) | 'bezier' | 'arc' | 'circle' | 'polygon'
+//   sweep (arc only), sides (polygon only)
 export function addStrips(opts) {
   const count = Math.max(1, opts.count | 0)
   const ledCount = Math.max(1, opts.ledCount | 0)
   const pitch = opts.pitch > 0 ? opts.pitch : 1
-  const geomType = opts.geomType === 'bezier' ? 'bezier' : 'line'
+  const geomType = STACKED_GEOM_TYPES.includes(opts.geomType) ? opts.geomType : 'line'
+  const isStackedShape = geomType !== 'line'
   const created = []
   const cx = view.x
   const cy = view.y
@@ -216,8 +221,10 @@ export function addStrips(opts) {
 
   for (let i = 0; i < count; i++) {
     let geomOpts
-    if (geomType === 'bezier') {
+    if (isStackedShape) {
       geomOpts = { center: { x: cx + i * offset, y: cy + i * offset } }
+      if (geomType === 'arc') geomOpts.sweep = opts.sweep ?? 90
+      if (geomType === 'polygon') geomOpts.sides = Math.max(3, Math.round(opts.sides) || 3)
     } else if (opts.placement === 'stacked') {
       geomOpts = { p0: { x: cx + i * offset, y: cy + i * offset }, angle: 0 }
     } else {

@@ -8,6 +8,9 @@
   // Clickable area is a touch larger than the drawn handle.
   const hit = $derived(size * 1.1)
   const isBezier = $derived(strip.geom.type === 'bezier')
+  const isArc = $derived(strip.geom.type === 'arc')
+  const isCircle = $derived(strip.geom.type === 'circle')
+  const isPolygon = $derived(strip.geom.type === 'polygon')
 
   const hs = $derived(handles(strip.geom, strip))
   function handleAt(id) {
@@ -18,6 +21,19 @@
     if (isBezier) {
       if (h.id === 'p0' || h.id === 'p1') return 'Drag to move this end (carries its control point with it)'
       return 'Drag to bend the curve. Shift: snap angle from the anchor to 15°.'
+    }
+    if (isArc) {
+      if (h.id === 'center') return 'Drag to move the arc'
+      if (h.id === 'start') return 'Drag to change radius and start angle'
+      if (h.id === 'sweep') return 'Drag to change sweep. Shift: snap to 15°.'
+    }
+    if (isCircle) {
+      if (h.id === 'center') return 'Drag to move the circle'
+      if (h.id === 'start') return 'Drag to change radius and start angle. Shift: snap to 15°.'
+    }
+    if (isPolygon) {
+      if (h.id === 'center') return 'Drag to move the polygon'
+      if (h.id === 'vertex0') return 'Drag to change radius and rotation. Shift: snap to 15°.'
     }
     if (h.id === 'p0') return 'Drag to move the strip start'
     if (h.id === 'end') {
@@ -60,6 +76,20 @@
     {@const p1 = handleAt('p1')}
     <line class="ctrl-line" x1={p0.x} y1={p0.y} x2={c0.x} y2={c0.y} vector-effect="non-scaling-stroke" />
     <line class="ctrl-line" x1={p1.x} y1={p1.y} x2={c1.x} y2={c1.y} vector-effect="non-scaling-stroke" />
+  {:else if isArc}
+    {@const center = handleAt('center')}
+    {@const start = handleAt('start')}
+    {@const sweep = handleAt('sweep')}
+    <line class="ctrl-line" x1={center.x} y1={center.y} x2={start.x} y2={start.y} vector-effect="non-scaling-stroke" />
+    <line class="ctrl-line" x1={center.x} y1={center.y} x2={sweep.x} y2={sweep.y} vector-effect="non-scaling-stroke" />
+  {:else if isCircle}
+    {@const center = handleAt('center')}
+    {@const start = handleAt('start')}
+    <line class="ctrl-line" x1={center.x} y1={center.y} x2={start.x} y2={start.y} vector-effect="non-scaling-stroke" />
+  {:else if isPolygon}
+    {@const center = handleAt('center')}
+    {@const v0 = handleAt('vertex0')}
+    <line class="ctrl-line" x1={center.x} y1={center.y} x2={v0.x} y2={v0.y} vector-effect="non-scaling-stroke" />
   {/if}
   {#each hs as h (h.id)}
     {#if isBezier && (h.id === 'c0' || h.id === 'c1')}
@@ -73,6 +103,17 @@
         <circle cx={h.x} cy={h.y} r={hit / 2} class="hit" />
         <circle cx={h.x} cy={h.y} r={size / 2} fill="#ffd54f" stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
       </g>
+    {:else if h.id === 'center'}
+      <g
+        class="center"
+        onpointerdown={(evt) => pointerDown(h.id, evt)}
+        onpointermove={pointerMove}
+        onpointerup={pointerUp}
+      >
+        <title>{tooltip(h)}</title>
+        <circle cx={h.x} cy={h.y} r={hit / 2} class="hit" />
+        <circle cx={h.x} cy={h.y} r={size / 2} fill="#fff" stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
+      </g>
     {:else}
       <g
         class={h.id.startsWith('pt:') ? 'pt' : h.id}
@@ -82,7 +123,7 @@
       >
         <title>{tooltip(h)}</title>
         <rect x={h.x - hit / 2} y={h.y - hit / 2} width={hit} height={hit} class="hit" />
-        <rect x={h.x - size / 2} y={h.y - size / 2} width={size} height={size} fill={h.id === 'end' ? '#ffd54f' : '#fff'} stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
+        <rect x={h.x - size / 2} y={h.y - size / 2} width={size} height={size} fill={h.id === 'end' || h.id === 'start' || h.id === 'sweep' || h.id === 'vertex0' ? '#ffd54f' : '#fff'} stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
       </g>
     {/if}
   {/each}
@@ -96,6 +137,10 @@
   .end { cursor: crosshair; }
   .pt { cursor: move; }
   .ctrl { cursor: crosshair; }
+  .center { cursor: move; }
+  .start { cursor: crosshair; }
+  .sweep { cursor: crosshair; }
+  .vertex0 { cursor: crosshair; }
   .ctrl-line {
     stroke: var(--muted);
     stroke-width: 1;

@@ -12,8 +12,7 @@
   } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
   import { quantizeAngle } from '../core/geometry/line.js'
-  import { curveLength } from '../core/geometry/bezier.js'
-  import { sample } from '../core/geometry/index.js'
+  import { sample, curveLength as geomCurveLength } from '../core/geometry/index.js'
   import { stripsBbox } from '../core/layout.js'
   import { gridStep } from '../core/model.js'
   import { endAddress, byteRange } from '../core/address.js'
@@ -22,9 +21,19 @@
   const strip = $derived(project.strips.find((s) => s.id === selection.primary))
   const isPoints = $derived(strip?.geom.type === 'points')
   const isBezier = $derived(strip?.geom.type === 'bezier')
+  const isArc = $derived(strip?.geom.type === 'arc')
+  const isCircle = $derived(strip?.geom.type === 'circle')
+  const isPolygon = $derived(strip?.geom.type === 'polygon')
+  // Every curve/shape type: hides the Angle field (none of them have a single
+  // "angle" the way a line does) and gets the generic curve-length readout.
+  const isCurve = $derived(isBezier || isArc || isCircle || isPolygon)
+  const isClosed = $derived(isCircle || isPolygon)
   const isFit = $derived(strip?.spacing === 'fit')
-  const bezierLength = $derived(isBezier ? curveLength(strip.geom) : 0)
-  const bezierFitCount = $derived(isBezier && strip.pitch > 0 ? Math.floor(bezierLength / strip.pitch) + 1 : 0)
+  const curveLen = $derived(isCurve ? geomCurveLength(strip.geom) : 0)
+  const curveFitCount = $derived(isCurve && strip.pitch > 0 ? Math.floor(curveLen / strip.pitch) + 1 : 0)
+  // Closed shapes (circle/polygon) wrap pitch-mode LEDs around instead of
+  // stopping, so warn here rather than silently overlapping turns.
+  const exceedsPerimeter = $derived(isClosed && !isFit && strip && strip.ledCount * strip.pitch > curveLen * 1.0001)
   const multi = $derived(selection.ids.length > 1)
   const selectedStrips = $derived(project.strips.filter((s) => selection.ids.includes(s.id)))
 
@@ -162,7 +171,7 @@
             Y ({project.units})
             <input type="number" step="any" value={fmt(originRel.y)} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
           </label>
-          {#if !multi && strip && !isPoints && !isBezier}
+          {#if !multi && strip && !isPoints && !isCurve}
             <label class="num">
               Angle (deg)
               <input
@@ -210,10 +219,136 @@
           </select>
         </label>
 
-        {#if isBezier}
+        {#if isCurve}
           <p class="hint">
-            Curve length {fmt(bezierLength)} {project.units}{#if !isFit} (fits {bezierFitCount} LEDs at pitch){/if}
+            Curve length {fmt(curveLen)} {project.units}{#if !isFit} (fits {curveFitCount} LEDs at pitch){/if}
           </p>
+          {#if exceedsPerimeter}
+            <p class="hint warn">
+              {strip.ledCount} LEDs &times; {fmt(strip.pitch)} {project.units} pitch = {fmt(strip.ledCount * strip.pitch)}
+              {project.units}, past the {isCircle ? 'circumference' : 'perimeter'} ({fmt(curveLen)} {project.units}) --
+              they wrap around instead of stopping.
+            </p>
+          {/if}
+        {/if}
+
+        {#if isArc}
+          <label>
+            <span class="label-row">
+              Radius ({project.units})
+              <Help text="Radius of the circle this arc is cut from." />
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="any"
+              value={fmt(strip.geom.radius)}
+              onchange={(e) => setGeom('radius', Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Start angle (deg)
+              <Help text="Angle (0° = +x, measured the same way as a line strip's angle) where the arc begins." />
+            </span>
+            <input
+              type="number"
+              step="0.5"
+              value={fmt(strip.geom.startAngle)}
+              onchange={(e) => setGeom('startAngle', quantizeAngle(parseFloat(e.target.value) || 0))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Sweep (deg)
+              <Help text="Signed degrees traveled from the start angle; negative sweeps the other way. Default 90 is the toolbar's 90° curve preset." />
+            </span>
+            <input
+              type="number"
+              step="0.5"
+              value={fmt(strip.geom.sweep)}
+              onchange={(e) => setGeom('sweep', Math.round((parseFloat(e.target.value) || 0) * 2) / 2)}
+            />
+          </label>
+        {/if}
+
+        {#if isCircle}
+          <label>
+            <span class="label-row">
+              Radius ({project.units})
+              <Help text="Circle radius." />
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="any"
+              value={fmt(strip.geom.radius)}
+              onchange={(e) => setGeom('radius', Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Start angle (deg)
+              <Help text="Angle where LED 0 sits on the circle." />
+            </span>
+            <input
+              type="number"
+              step="0.5"
+              value={fmt(strip.geom.startAngle)}
+              onchange={(e) => setGeom('startAngle', quantizeAngle(parseFloat(e.target.value) || 0))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Direction
+              <Help text="Which way LED order travels around the circle." />
+            </span>
+            <select value={strip.geom.direction} onchange={(e) => setGeom('direction', parseInt(e.target.value))}>
+              <option value={1}>Clockwise</option>
+              <option value={-1}>Counter-clockwise</option>
+            </select>
+          </label>
+        {/if}
+
+        {#if isPolygon}
+          <label>
+            <span class="label-row">
+              Radius ({project.units})
+              <Help text="Circumradius: distance from the polygon's centre to each vertex." />
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="any"
+              value={fmt(strip.geom.radius)}
+              onchange={(e) => setGeom('radius', Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Sides
+              <Help text="Number of polygon sides/vertices (3 = triangle)." />
+            </span>
+            <input
+              type="number"
+              min="3"
+              step="1"
+              value={strip.geom.sides}
+              onchange={(e) => setGeom('sides', Math.max(3, Math.round(parseFloat(e.target.value)) || 3))}
+            />
+          </label>
+          <label>
+            <span class="label-row">
+              Rotation (deg)
+              <Help text="Angle of the first vertex from the polygon's centre." />
+            </span>
+            <input
+              type="number"
+              step="0.5"
+              value={fmt(strip.geom.rotation)}
+              onchange={(e) => setGeom('rotation', quantizeAngle(parseFloat(e.target.value) || 0))}
+            />
+          </label>
         {/if}
 
         {#if !isFit}
@@ -322,6 +457,9 @@
     color: var(--muted);
     font-size: 0.8rem;
     margin: 0;
+  }
+  .hint.warn {
+    color: #ffb74d;
   }
   label {
     display: flex;

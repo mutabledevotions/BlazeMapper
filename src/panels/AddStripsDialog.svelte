@@ -6,7 +6,19 @@
   import Help from './Help.svelte'
 
   let dialogEl
-  let geomType = $state('line')
+  // mode is which toolbar button opened the dialog: 'line' | 'bezier' | 'shape'.
+  // shapeKind only matters when mode === 'shape': it picks the Shape <select>
+  // option, which in turn determines the actual geomType (and, for the arc/
+  // polygon presets, a fixed field value the form doesn't expose for editing).
+  let mode = $state('line')
+  let shapeKind = $state('arc90') // 'arc90' | 'arcCustom' | 'circle' | 'triangle' | 'polygon'
+
+  const geomType = $derived.by(() => {
+    if (mode !== 'shape') return mode
+    if (shapeKind === 'circle') return 'circle'
+    if (shapeKind === 'triangle' || shapeKind === 'polygon') return 'polygon'
+    return 'arc'
+  })
 
   function defaults() {
     return {
@@ -20,7 +32,9 @@
       placement: 'rows',
       rowSpacing: +convert(50, 'mm', project.units).toFixed(2),
       serpentine: false,
-      offset: +convert(10, 'mm', project.units).toFixed(2)
+      offset: +convert(10, 'mm', project.units).toFixed(2),
+      sweep: 90,
+      sides: 3
     }
   }
 
@@ -31,6 +45,14 @@
   const LENGTH_FIELDS = ['pitch', 'rowSpacing', 'offset', 'z']
   function storeKey() {
     return `pm.addStrips.last.${geomType}`
+  }
+
+  // The 90deg-arc and triangle presets fix one field the form hides, regardless
+  // of whatever was last saved under the shared 'arc'/'polygon' memory key.
+  function applyPresetLocks(f) {
+    if (shapeKind === 'arc90') f.sweep = 90
+    if (shapeKind === 'triangle') f.sides = 3
+    return f
   }
 
   function loadLast() {
@@ -55,13 +77,23 @@
 
   let form = $state(defaults())
 
-  // geomType: 'line' (default) or 'bezier'. Bezier reuses every field this
-  // dialog already has -- it just always places "stacked" (each strip offset
-  // from the view centre) since phase 5 only asked for that one placement.
+  // mode: 'line' (default), 'bezier', or 'shape' (arc/circle/polygon, picked
+  // by the Shape select inside the dialog). Every non-'line' mode reuses every
+  // field this dialog already has -- they just always place "stacked" (each
+  // strip offset from the view centre) since phase 5 only asked for that one
+  // placement for curves.
   export function open(type = 'line') {
-    geomType = type === 'bezier' ? 'bezier' : 'line'
-    form = loadLast() || defaults()
+    mode = type === 'bezier' || type === 'shape' ? type : 'line'
+    form = applyPresetLocks(loadLast() || defaults())
     dialogEl.showModal()
+  }
+
+  // Switching the Shape select mid-dialog reloads that shape's own remembered
+  // form (geomType just changed), then re-locks whichever field the new kind
+  // hides.
+  function onShapeKindChange(e) {
+    shapeKind = e.target.value
+    form = applyPresetLocks(loadLast() || defaults())
   }
 
   function onPitchPreset(e) {
@@ -81,15 +113,19 @@
 
   function submit(evt) {
     evt.preventDefault()
-    addStrips({ ...form, geomType })
-    saveLast({ ...form })
+    const finalForm = applyPresetLocks({ ...form })
+    addStrips({ ...finalForm, geomType })
+    saveLast(finalForm)
     dialogEl.close()
   }
+
+  const SHAPE_TITLES = { arc90: 'Add arc strips', arcCustom: 'Add arc strips', circle: 'Add circle strips', triangle: 'Add triangle strips', polygon: 'Add polygon strips' }
+  const title = $derived(mode === 'bezier' ? 'Add Bezier strips' : mode === 'shape' ? SHAPE_TITLES[shapeKind] : 'Add strips')
 </script>
 
 <dialog bind:this={dialogEl} class="pm-dialog">
   <form onsubmit={submit}>
-    <h3>{geomType === 'bezier' ? 'Add Bezier strips' : 'Add strips'}</h3>
+    <h3>{title}</h3>
     <div class="grid">
       <label>
         Count
@@ -146,7 +182,31 @@
           <option value="allOne">All on one channel</option>
         </select>
       </label>
-      {#if geomType === 'bezier'}
+      {#if mode === 'shape'}
+        <label>
+          Shape
+          <select value={shapeKind} onchange={onShapeKindChange}>
+            <option value="arc90">90&deg; arc</option>
+            <option value="arcCustom">Arc (custom sweep)</option>
+            <option value="circle">Circle</option>
+            <option value="triangle">Triangle</option>
+            <option value="polygon">Polygon</option>
+          </select>
+        </label>
+        {#if shapeKind === 'arcCustom'}
+          <label>
+            Sweep (deg)
+            <input type="number" step="any" bind:value={form.sweep} />
+          </label>
+        {/if}
+        {#if shapeKind === 'polygon'}
+          <label>
+            Sides
+            <input type="number" min="3" step="1" bind:value={form.sides} />
+          </label>
+        {/if}
+      {/if}
+      {#if geomType === 'bezier' || mode === 'shape'}
         <label>
           Offset per strip ({project.units})
           <input type="number" min="0" step="any" bind:value={form.offset} />
@@ -181,7 +241,9 @@
     <p class="hint">
       {geomType === 'bezier'
         ? 'Bezier strips are placed stacked at the current view centre, each a gentle S sized to fit its LED count at pitch.'
-        : 'Strips are placed at the current view centre.'}
+        : mode === 'shape'
+          ? 'Shapes are placed stacked at the current view centre, sized so the LED count roughly fits at pitch.'
+          : 'Strips are placed at the current view centre.'}
     </p>
     <div class="actions">
       <button type="button" onclick={() => dialogEl.close()}>Cancel</button>

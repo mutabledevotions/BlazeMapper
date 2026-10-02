@@ -452,7 +452,12 @@
       setDragMode('endHandle')
     } else {
       const strip = project.strips.find((s) => s.id === stripId)
-      if (strip && strip.geom.type === 'bezier') {
+      // Reuses the bezier control handle's "15°" shift-snap badge for arc's
+      // sweep/start and circle/polygon's start/vertex0 handles too (every
+      // non-'center' handle on these shapes shift-snaps its angle the same way).
+      const isAngleHandle =
+        strip && ['arc', 'circle', 'polygon'].includes(strip.geom.type) && handleId !== 'center'
+      if (strip && (strip.geom.type === 'bezier' || isAngleHandle)) {
         dragHandlePos = pt
         setDragMode('bezierHandle')
       }

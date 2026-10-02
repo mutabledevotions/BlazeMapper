@@ -16,13 +16,41 @@
   )
   const pathD = $derived(points.length > 1 ? 'M ' + points.map((p) => `${p.x},${p.y}`).join(' L ') : '')
 
-  // True curve path (bezier only) -- the LED path above already follows the
-  // sampled arc-length points, this is just a faint guide showing the exact
-  // underlying curve, including past the last LED if pitch mode ran short of it.
+  // True curve/shape outline (bezier, arc, circle, polygon) -- the LED path
+  // above already follows the sampled points, this is just a faint dashed
+  // guide showing the exact underlying path, including past the last LED if
+  // pitch mode ran short of it (bezier/arc) or wrapped around (circle/polygon).
   const curvePathD = $derived.by(() => {
     const g = strip.geom
-    if (g.type !== 'bezier') return ''
-    return `M ${g.p0.x},${g.p0.y} C ${g.c0.x},${g.c0.y} ${g.c1.x},${g.c1.y} ${g.p1.x},${g.p1.y}`
+    if (g.type === 'bezier') {
+      return `M ${g.p0.x},${g.p0.y} C ${g.c0.x},${g.c0.y} ${g.c1.x},${g.c1.y} ${g.p1.x},${g.p1.y}`
+    }
+    if (g.type === 'arc') {
+      const rad = (deg) => (deg * Math.PI) / 180
+      const pt = (deg) => ({ x: g.center.x + g.radius * Math.cos(rad(deg)), y: g.center.y + g.radius * Math.sin(rad(deg)) })
+      const start = pt(g.startAngle)
+      const end = pt(g.startAngle + g.sweep)
+      const large = Math.abs(g.sweep) > 180 ? 1 : 0
+      const sweepFlag = g.sweep >= 0 ? 1 : 0
+      return `M ${start.x},${start.y} A ${g.radius},${g.radius} 0 ${large} ${sweepFlag} ${end.x},${end.y}`
+    }
+    if (g.type === 'circle') {
+      // Two 180 degree arcs, since a single SVG arc command can't describe a
+      // full circle (start === end degenerates it).
+      const left = { x: g.center.x - g.radius, y: g.center.y }
+      const right = { x: g.center.x + g.radius, y: g.center.y }
+      return `M ${left.x},${left.y} A ${g.radius},${g.radius} 0 1 1 ${right.x},${right.y} A ${g.radius},${g.radius} 0 1 1 ${left.x},${left.y}`
+    }
+    if (g.type === 'polygon') {
+      const pts = []
+      for (let i = 0; i < g.sides; i++) {
+        const angle = g.rotation + (360 * i) / g.sides
+        const rad = (angle * Math.PI) / 180
+        pts.push({ x: g.center.x + g.radius * Math.cos(rad), y: g.center.y + g.radius * Math.sin(rad) })
+      }
+      return 'M ' + pts.map((p) => `${p.x},${p.y}`).join(' L ') + ' Z'
+    }
+    return ''
   })
 
   // Wire order: reversed strips start at their last geometric point.
@@ -73,7 +101,12 @@
     {/if}
   {/if}
   {#if selected && showLabel}
-    <text x={points[0]?.x ?? strip.geom.p0.x} y={(points[0]?.y ?? strip.geom.p0.y) - dotRadius - 8 * px} class="label" font-size={12 * px}>{strip.name}</text>
+    <text
+      x={points[0]?.x ?? strip.geom.p0?.x ?? strip.geom.center?.x ?? 0}
+      y={(points[0]?.y ?? strip.geom.p0?.y ?? strip.geom.center?.y ?? 0) - dotRadius - 8 * px}
+      class="label"
+      font-size={12 * px}>{strip.name}</text
+    >
   {/if}
 </g>
 
