@@ -197,6 +197,10 @@
     background: var(--border);
   }
   .grid-step {
+    display: inline-block;
+    min-width: 8.5rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
     font-size: 0.78rem;
     color: var(--muted);
   }
@@ -235,6 +239,8 @@
     width: 4.2rem;
   }
   .units-suffix {
+    display: inline-block;
+    width: 1.6rem;
     color: var(--muted);
     font-size: 0.78rem;
     padding-bottom: 0.35rem;
@@ -271,7 +277,12 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+  /* Fixed footprints: text that changes (on/off, step, units) must not
+     resize its item and shift the rest of the toolbar. */
   .snap-indicator {
+    width: 8.5rem;
+    flex-shrink: 0;
+    justify-content: center;
     background: var(--input-bg);
     color: var(--muted);
     border: 1px solid var(--border);
