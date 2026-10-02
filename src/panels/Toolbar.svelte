@@ -16,7 +16,6 @@
     rotateSelectedBy
   } from '../state/project.svelte.js'
   import { gridStep } from '../core/model.js'
-  import { contextHint } from '../state/hotkeys.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import ImagePanel from './ImagePanel.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
@@ -32,13 +31,6 @@
   // what dragging would actually do right now.
   const effectiveSnap = $derived(project.grid.snap !== keys.alt)
 
-  const hintText = $derived.by(() => {
-    if (ui.typing) return ''
-    if (calibration.active) return contextHint('calibrate')
-    if (ui.dragMode === 'endHandle') return contextHint('endHandleDrag')
-    if (ui.dragMode === 'groupResize') return contextHint('groupResizeDrag')
-    return hasSelection ? contextHint('selection') : contextHint('idle')
-  })
 </script>
 
 <div class="toolbar">
@@ -173,7 +165,6 @@
     </label>
   </div>
 
-  <span class="hint-line">{hintText}</span>
   </div>
 </div>
 
@@ -245,17 +236,16 @@
     font-size: 0.78rem;
     padding-bottom: 0.35rem;
   }
-  /* Second toolbar row: World + Transform side by side, hint line filling the
-     rest. Groups are nowrap; the row only wraps when narrower than both. */
+  /* World + Transform as one flex item: no shrink, so it stays on row one when
+     it fits and otherwise moves to the next row whole. max-width caps it at the
+     toolbar width; only then do its two nowrap groups wrap internally. */
   .tb-cluster {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 0.5rem 1rem;
-    flex-basis: 100%;
-    margin-top: 0.25rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border);
+    flex: 0 0 auto;
+    max-width: 100%;
   }
   .tb-group {
     display: flex;
@@ -311,19 +301,5 @@
   .key-badge.active {
     background: var(--accent);
     color: #0b0d10;
-  }
-  .hint-line {
-    /* Fills the space left in row two and ellipsizes, so changing hint text
-       never resizes or moves the World/Transform groups. */
-    margin-left: auto;
-    flex: 1 1 0;
-    min-width: 0;
-    align-self: center;
-    color: var(--muted);
-    font-size: 0.78rem;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 </style>

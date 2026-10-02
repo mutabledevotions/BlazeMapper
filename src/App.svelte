@@ -4,6 +4,7 @@
   import StripProps from './panels/StripProps.svelte'
   import ExportDrawer from './panels/ExportDrawer.svelte'
   import Canvas from './canvas/Canvas.svelte'
+  import HintOverlay from './canvas/HintOverlay.svelte'
   import { setKeyState, clearKeys, setTyping } from './state/project.svelte.js'
 
   // Single window-level listener for the live modifier-key state (keys in the
@@ -119,6 +120,7 @@
     </aside>
     <main class="canvas-area">
       <Canvas />
+      <HintOverlay />
     </main>
   </div>
   <ExportDrawer />
@@ -164,6 +166,7 @@
     background: var(--accent);
   }
   .canvas-area {
+    position: relative;
     flex: 1;
     min-width: 0;
   }
