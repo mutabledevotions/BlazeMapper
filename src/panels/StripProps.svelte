@@ -1,4 +1,5 @@
 <script>
+  import { fmt } from '../core/units.js'
   // Hidden/locked toggles moved to the strip list's layer-style icons (Illustrator-style).
   import {
     project,
@@ -105,11 +106,11 @@
         <div class="readout-row">
           <label class="num">
             X ({project.units})
-            <input type="number" step="any" value={+originRel.x.toFixed(2)} onchange={(e) => setOriginX(parseFloat(e.target.value) || 0)} />
+            <input type="number" step="any" value={fmt(originRel.x)} onchange={(e) => setOriginX(parseFloat(e.target.value) || 0)} />
           </label>
           <label class="num">
             Y ({project.units})
-            <input type="number" step="any" value={+originRel.y.toFixed(2)} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
+            <input type="number" step="any" value={fmt(originRel.y)} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
           </label>
           {#if !multi && strip && !isPoints}
             <label class="num">
@@ -166,7 +167,7 @@
               <Help text="Common LED strip densities, converted to the project's units." />
             </span>
             <select onchange={onPitchPreset}>
-              <option value="custom">custom ({strip.pitch} {project.units})</option>
+              <option value="custom">custom ({fmt(strip.pitch)} {project.units})</option>
               {#each PITCH_PRESETS as p}
                 <option value={+convert(p.pitchMm, 'mm', project.units).toFixed(3)}>{p.perMetre}/m ({+convert(p.pitchMm, 'mm', project.units).toFixed(3)} {project.units})</option>
               {/each}
@@ -182,7 +183,7 @@
               type="number"
               min="0.1"
               step="any"
-              value={strip.pitch}
+              value={fmt(strip.pitch)}
               onchange={(e) => set('pitch', parseFloat(e.target.value) || 0.1)}
             />
           </label>
@@ -192,7 +193,7 @@
               Spacing ({project.units}, derived)
               <Help text="Derived from LED count and the distance between the two endpoints. Drag the end handle to change it." />
             </span>
-            <input type="number" value={derivedPitch()} readonly disabled />
+            <input type="number" value={fmt(derivedPitch())} readonly disabled />
           </label>
         {/if}
       {/if}
@@ -235,7 +236,7 @@
           Z
           <Help text="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z." />
         </span>
-        <input type="number" step="1" value={strip.z} onchange={(e) => set('z', parseFloat(e.target.value) || 0)} />
+        <input type="number" step="1" value={fmt(strip.z)} onchange={(e) => set('z', parseFloat(e.target.value) || 0)} />
       </label>
     {/if}
   {/if}

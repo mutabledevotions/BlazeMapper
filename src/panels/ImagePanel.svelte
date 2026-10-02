@@ -1,4 +1,5 @@
 <script>
+  import { fmt } from '../core/units.js'
   // Reference image controls: load/replace/remove, visible/lock, opacity,
   // rotation, scale, fit-to-world, and two-point calibration. Floating
   // non-modal <dialog> opened from the toolbar; non-modal so calibration
@@ -110,7 +111,7 @@
       <input
         type="number"
         step="0.5"
-        value={project.image.rotation}
+        value={fmt(project.image.rotation)}
         onchange={(e) => updateImage({ rotation: quantizeAngle(parseFloat(e.target.value) || 0) })}
       />
     </label>
@@ -124,7 +125,7 @@
         type="number"
         min="0.000001"
         step="any"
-        value={project.image.scale}
+        value={fmt(project.image.scale)}
         onchange={(e) => updateImage({ scale: Math.max(1e-6, parseFloat(e.target.value) || project.image.scale) })}
       />
     </label>

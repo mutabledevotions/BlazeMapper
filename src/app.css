@@ -93,9 +93,8 @@ button:focus-visible {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-/* Utility for "label text ... ? help marker" rows: the Help marker's own
-   margin-left: auto does the right-alignment, this just makes the row a flex
-   container so that auto-margin has somewhere to push against. */
+/* Utility for "label text ? help marker" rows: the marker sits right after
+   the label text. */
 .label-row {
   display: flex;
   align-items: baseline;

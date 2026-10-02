@@ -1,6 +1,5 @@
 <script>
-  // Small underlined "?" marker, meant to sit right-aligned at the end of a
-  // property label's line. Hover or keyboard focus opens a styled tooltip box
+  // Small underlined "?" marker, placed right after a property label's text. Hover or keyboard focus opens a styled tooltip box
   // after a short delay (native title= tooltips take ~1.5s -- this is faster
   // since these are read far more often than once). Replaces title= hints on
   // property and dialog labels; buttons keep their native title attribute.
@@ -66,7 +65,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-left: auto;
     width: 1rem;
     height: 1rem;
     font-size: 0.7rem;

@@ -68,9 +68,9 @@
   const px = $derived(viewBox.w / clientSize.w)
 
   const selectedStrips = $derived(project.strips.filter((s) => selection.ids.includes(s.id)))
-  const groupBbox = $derived(selectedStrips.length >= 2 ? stripsBbox(selectedStrips) : null)
+  const groupBbox = $derived(selectedStrips.length >= 1 ? stripsBbox(selectedStrips) : null)
   // Resize handles (and their dashed outline) show for any non-empty selection,
-  // including a single strip -- only the rotate handle above is group-only.
+  // including a single strip; the rotate handle shows for any selection too.
   const selBbox = $derived(selectedStrips.length >= 1 ? stripsBbox(selectedStrips) : null)
 
   $effect(() => {

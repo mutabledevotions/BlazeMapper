@@ -39,3 +39,12 @@ function round(n) {
 }
 
 export const UNIT_LABELS = { mm: 'mm', in: 'in', px: 'px' }
+
+// Display formatting: about 5 significant digits by limiting decimals only,
+// so large values (e.g. 200000 mm stage coordinates) keep their integer part.
+export function fmt(n, sig = 5) {
+  if (typeof n !== 'number' || !isFinite(n)) return n
+  const a = Math.abs(n)
+  const intDigits = a >= 1 ? Math.floor(Math.log10(a)) + 1 : 1
+  return +n.toFixed(Math.max(0, sig - intDigits))
+}

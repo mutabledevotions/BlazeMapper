@@ -1,4 +1,5 @@
 <script>
+  import { fmt } from '../core/units.js'
   import {
     project,
     selection,
@@ -88,7 +89,7 @@
         X
         <input
           type="number"
-          value={project.world.x}
+          value={fmt(project.world.x)}
           onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
         />
       </label>
@@ -96,7 +97,7 @@
         Y
         <input
           type="number"
-          value={project.world.y}
+          value={fmt(project.world.y)}
           onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
         />
       </label>
@@ -105,7 +106,7 @@
         <input
           type="number"
           min="0.001"
-          value={project.world.size}
+          value={fmt(project.world.size)}
           onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
         />
       </label>
