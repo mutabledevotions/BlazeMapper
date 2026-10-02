@@ -3,7 +3,8 @@
 // history.js can later wrap them without canvas/panel code changing.
 
 import { newProject, newStrip } from '../core/model.js'
-import { translate as geomTranslate, moveHandle as geomMoveHandle } from '../core/geometry/index.js'
+import { translate as geomTranslate, moveHandle as geomMoveHandle, scale as geomScale } from '../core/geometry/index.js'
+import { convert, GRID_DEFAULTS } from '../core/units.js'
 
 export const project = $state(newProject())
 
@@ -36,7 +37,7 @@ export function selectStrip(id) {
 export function moveHandle(id, handleId, pt, opts = {}) {
   const strip = project.strips.find((s) => s.id === id)
   if (!strip || strip.locked) return
-  strip.geom = geomMoveHandle(strip.geom, handleId, pt, opts)
+  Object.assign(strip, geomMoveHandle(strip.geom, handleId, pt, opts, strip))
 }
 
 export function translateStrip(id, dx, dy) {
@@ -45,8 +46,22 @@ export function translateStrip(id, dx, dy) {
   strip.geom = geomTranslate(strip.geom, dx, dy)
 }
 
+// Converts every length in the project so the physical layout is unchanged.
+// Grid resets to a sensible step for the new unit rather than e.g. 0.3937 in.
 export function setUnits(units) {
+  const from = project.units
+  if (from === units) return
+  const k = convert(1, from, units)
+  for (const strip of project.strips) {
+    strip.geom = geomScale(strip.geom, k)
+    strip.pitch = round3(strip.pitch * k)
+  }
+  project.grid.size = GRID_DEFAULTS[units]
   project.units = units
+}
+
+function round3(n) {
+  return Math.round(n * 1000) / 1000
 }
 
 export function setGrid(patch) {

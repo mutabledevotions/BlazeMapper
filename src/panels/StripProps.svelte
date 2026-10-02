@@ -1,6 +1,6 @@
 <script>
   import { project, selection, updateStrip } from '../state/project.svelte.js'
-  import { PITCH_PRESETS } from '../core/units.js'
+  import { PITCH_PRESETS, convert } from '../core/units.js'
 
   const strip = $derived(project.strips.find((s) => s.id === selection.stripId))
 
@@ -42,15 +42,15 @@
     <label>
       Pitch preset
       <select onchange={onPitchPreset}>
-        <option value="custom">custom ({strip.pitch} mm)</option>
+        <option value="custom">custom ({strip.pitch} {project.units})</option>
         {#each PITCH_PRESETS as p}
-          <option value={p.pitchMm}>{p.perMetre}/m ({p.pitchMm} mm)</option>
+          <option value={+convert(p.pitchMm, 'mm', project.units).toFixed(3)}>{p.perMetre}/m ({+convert(p.pitchMm, 'mm', project.units).toFixed(3)} {project.units})</option>
         {/each}
       </select>
     </label>
 
     <label>
-      Pitch (mm)
+      Pitch ({project.units})
       <input
         type="number"
         min="0.1"

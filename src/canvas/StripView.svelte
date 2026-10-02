@@ -3,7 +3,7 @@
   // Click selects, drag (via onDragStart) translates the whole strip.
   import { sample } from '../core/geometry/index.js'
 
-  let { strip, selected, onDragStart } = $props()
+  let { strip, selected, px = 1, onDragStart } = $props()
 
   const points = $derived(sample(strip.geom, strip))
   const dotRadius = $derived(Math.max(0.8, strip.pitch * 0.3))
@@ -26,7 +26,7 @@
     <circle cx={points[0].x} cy={points[0].y} r={dotRadius * 1.8} fill="none" stroke={strip.color} stroke-width="1" vector-effect="non-scaling-stroke" />
   {/if}
   {#if selected}
-    <text x={points[0]?.x ?? strip.geom.p0.x} y={(points[0]?.y ?? strip.geom.p0.y) - dotRadius * 3} class="label" font-size={Math.max(3, dotRadius * 2)}>{strip.name}</text>
+    <text x={points[0]?.x ?? strip.geom.p0.x} y={(points[0]?.y ?? strip.geom.p0.y) - dotRadius - 8 * px} class="label" font-size={12 * px}>{strip.name}</text>
   {/if}
 </g>
 

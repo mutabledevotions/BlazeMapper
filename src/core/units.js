@@ -37,3 +37,8 @@ export function pitchMmFromDensity(perMetre) {
 function round(n) {
   return Math.round(n * 1000) / 1000
 }
+
+// Grid step used when switching to a unit.
+export const GRID_DEFAULTS = { mm: 10, in: 0.5, px: 10 }
+
+export const UNIT_LABELS = { mm: 'mm', in: 'in', px: 'px' }

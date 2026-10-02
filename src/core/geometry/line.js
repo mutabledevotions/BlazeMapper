@@ -2,8 +2,6 @@
 // Fit mode (p0..p1, N LEDs spread between them) is phase 2; sample() supports it
 // here so layout/export never need to change when it lands.
 
-const HANDLE_LEN = 60 // visual length (world units) of the angle handle, independent of strip length
-
 function angleVector(angleDeg) {
   const rad = (angleDeg * Math.PI) / 180
   return { x: Math.cos(rad), y: Math.sin(rad) }
@@ -38,29 +36,40 @@ export function sample(geom, strip) {
   return pts
 }
 
-export function handles(geom) {
+// Where the far-end handle sits: the last LED (fit mode: p1).
+function endPoint(geom, strip) {
+  if (strip.spacing === 'fit' && geom.p1) return { ...geom.p1 }
   const v = angleVector(geom.angle)
+  const len = Math.max(1, (strip.ledCount | 0) - 1) * strip.pitch
+  return { x: geom.p0.x + v.x * len, y: geom.p0.y + v.y * len }
+}
+
+export function handles(geom, strip) {
+  const end = endPoint(geom, strip)
   return [
     { id: 'p0', x: geom.p0.x, y: geom.p0.y },
-    { id: 'end', x: geom.p0.x + v.x * HANDLE_LEN, y: geom.p0.y + v.y * HANDLE_LEN }
+    { id: 'end', x: end.x, y: end.y }
   ]
 }
 
-export function moveHandle(geom, id, pt, opts = {}) {
-  const next = { ...geom, p0: { ...geom.p0 } }
+// Returns a strip patch ({ geom, ...other strip fields }), not just a geom,
+// because the end handle also resizes the strip (ledCount in pitch mode).
+export function moveHandle(geom, id, pt, opts = {}, strip) {
   if (id === 'p0') {
-    next.p0 = { x: pt.x, y: pt.y }
-    return next
+    return { geom: { ...geom, p0: { x: pt.x, y: pt.y } } }
   }
   if (id === 'end') {
-    let angle = (Math.atan2(pt.y - geom.p0.y, pt.x - geom.p0.x) * 180) / Math.PI
-    if (opts.shiftSnap) {
-      angle = Math.round(angle / 15) * 15
+    if (strip.spacing === 'fit') {
+      return { geom: { ...geom, p1: { x: pt.x, y: pt.y } } }
     }
-    next.angle = angle
-    return next
+    const dx = pt.x - geom.p0.x
+    const dy = pt.y - geom.p0.y
+    let angle = (Math.atan2(dy, dx) * 180) / Math.PI
+    if (opts.shiftSnap) angle = Math.round(angle / 15) * 15
+    const ledCount = Math.max(1, Math.round(Math.hypot(dx, dy) / strip.pitch) + 1)
+    return { geom: { ...geom, angle }, ledCount }
   }
-  return geom
+  return { geom }
 }
 
 export function translate(geom, dx, dy) {
@@ -87,4 +96,11 @@ export function bbox(geom, strip) {
     if (p.y > maxY) maxY = p.y
   }
   return { minX, minY, maxX, maxY }
+}
+
+// Uniform scale about the origin; used when the project's units change.
+export function scale(geom, k) {
+  const next = { ...geom, p0: { x: geom.p0.x * k, y: geom.p0.y * k } }
+  if (geom.p1) next.p1 = { x: geom.p1.x * k, y: geom.p1.y * k }
+  return next
 }

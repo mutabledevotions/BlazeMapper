@@ -2,9 +2,10 @@
   // Draggable control handles for the selected strip's geometry.
   import { handles } from '../core/geometry/index.js'
 
-  let { strip, onHandleDrag } = $props()
+  let { strip, px = 1, onHandleDrag } = $props()
+  const size = $derived(10 * px) // 10 screen px
 
-  const hs = $derived(handles(strip.geom))
+  const hs = $derived(handles(strip.geom, strip))
 
   let dragId = null
 
@@ -27,11 +28,12 @@
 <g class="handles">
   {#each hs as h (h.id)}
     <rect
-      x={h.x - 3}
-      y={h.y - 3}
-      width="6"
-      height="6"
-      fill="#fff"
+      x={h.x - size / 2}
+      y={h.y - size / 2}
+      width={size}
+      height={size}
+      fill={h.id === 'end' ? '#ffd54f' : '#fff'}
+      class={h.id}
       stroke="#222"
       stroke-width="0.5"
       vector-effect="non-scaling-stroke"
@@ -41,3 +43,8 @@
     />
   {/each}
 </g>
+
+<style>
+  .p0 { cursor: move; }
+  .end { cursor: crosshair; }
+</style>

@@ -5,12 +5,36 @@
   import Grid from './Grid.svelte'
   import StripView from './StripView.svelte'
   import Handles from './Handles.svelte'
+  import { convert } from '../core/units.js'
 
   let svgEl
   let viewBox = $state({ x: -50, y: -50, w: 600, h: 450 })
   let spaceHeld = $state(false)
   let panState = null // { startScreenX, startScreenY, startBox }
   let dragState = null // { stripId, startWorld, startGeomP0 }
+
+  // World units per screen pixel. Labels, handles, markers multiply by this
+  // so they keep a constant on-screen size at any zoom or unit.
+  let clientSize = $state({ w: 1, h: 1 })
+  const px = $derived(Math.max(viewBox.w / clientSize.w, viewBox.h / clientSize.h))
+
+  $effect(() => {
+    const ro = new ResizeObserver(() => {
+      clientSize = { w: svgEl.clientWidth || 1, h: svgEl.clientHeight || 1 }
+    })
+    ro.observe(svgEl)
+    return () => ro.disconnect()
+  })
+
+  // Rescale the view with the geometry when units change, so the picture stays put.
+  let lastUnits = project.units
+  $effect(() => {
+    const u = project.units
+    if (u === lastUnits) return
+    const k = convert(1, lastUnits, u)
+    lastUnits = u
+    viewBox = { x: viewBox.x * k, y: viewBox.y * k, w: viewBox.w * k, h: viewBox.h * k }
+  })
 
   function screenToWorld(evt) {
     const pt = svgEl.createSVGPoint()
@@ -54,11 +78,8 @@
 
   function onPointerMove(evt) {
     if (panState) {
-      const ctm = svgEl.getScreenCTM()
-      const scaleX = viewBox.w / svgEl.clientWidth
-      const scaleY = viewBox.h / svgEl.clientHeight
-      const dx = (evt.clientX - panState.startClientX) * scaleX
-      const dy = (evt.clientY - panState.startClientY) * scaleY
+      const dx = (evt.clientX - panState.startClientX) * px
+      const dy = (evt.clientY - panState.startClientY) * px
       viewBox = { ...panState.startBox, x: panState.startBox.x - dx, y: panState.startBox.y - dy }
       return
     }
@@ -130,13 +151,14 @@
       <StripView
         {strip}
         selected={selection.stripId === strip.id}
+        {px}
         onDragStart={(evt) => startStripDrag(strip.id, evt)}
       />
     {/if}
   {/each}
   {#each project.strips as strip (strip.id)}
     {#if selection.stripId === strip.id && !strip.hidden}
-      <Handles {strip} onHandleDrag={(handleId, evt) => onHandleDrag(strip.id, handleId, evt)} />
+      <Handles {strip} {px} onHandleDrag={(handleId, evt) => onHandleDrag(strip.id, handleId, evt)} />
     {/if}
   {/each}
 </svg>

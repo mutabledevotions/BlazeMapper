@@ -17,19 +17,26 @@ describe('geometry/line', () => {
 
   it('moves p0 handle directly', () => {
     const geom = { type: 'line', p0: { x: 0, y: 0 }, angle: 0, p1: null }
-    const next = moveHandle(geom, 'p0', { x: 5, y: 7 })
+    const next = moveHandle(geom, 'p0', { x: 5, y: 7 }, {}, { ledCount: 3, pitch: 10 }).geom
     expect(next.p0).toEqual({ x: 5, y: 7 })
   })
 
   it('snaps angle to 15 degrees with shift', () => {
     const geom = { type: 'line', p0: { x: 0, y: 0 }, angle: 0, p1: null }
-    const next = moveHandle(geom, 'end', { x: 10, y: 6 }, { shiftSnap: true })
+    const next = moveHandle(geom, 'end', { x: 10, y: 6 }, { shiftSnap: true }, { ledCount: 3, pitch: 10 }).geom
     expect(next.angle % 15).toBe(0)
+  })
+
+  it('end handle sits at last LED and resizes the strip', () => {
+    const geom = { type: 'line', p0: { x: 0, y: 0 }, angle: 0, p1: null }
+    const strip = { ledCount: 5, pitch: 10, spacing: 'pitch' }
+    expect(handles(geom, strip)[1]).toMatchObject({ x: 40, y: 0 })
+    expect(moveHandle(geom, 'end', { x: 0, y: 72 }, {}, strip)).toMatchObject({ ledCount: 8, geom: { angle: 90 } })
   })
 
   it('exposes p0 and end handles', () => {
     const geom = { type: 'line', p0: { x: 1, y: 2 }, angle: 0, p1: null }
-    const hs = handles(geom)
+    const hs = handles(geom, { ledCount: 3, pitch: 10 })
     expect(hs.map((h) => h.id)).toEqual(['p0', 'end'])
   })
 })
