@@ -6,6 +6,8 @@ import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
 import { fitToBox, calibrateScale, imageCorners, imageBbox, convertImageUnits } from '../src/core/image.js'
 import { ledCount, endAddress, lastAddress, packChannel, setStart, ensureAddresses } from '../src/core/address.js'
+import { buildArcLengthTable } from '../src/core/geometry/arclength.js'
+import { curveLength as bezierCurveLength } from '../src/core/geometry/bezier.js'
 import {
   project,
   selection,
@@ -700,5 +702,161 @@ describe('core/address: ensureAddresses migration', () => {
   it('is a no-op (same reference) when every item already has a start', () => {
     const items = [strip('a', 0, 1, 10)]
     expect(ensureAddresses(items)).toBe(items)
+  })
+})
+
+describe('core/geometry/arclength', () => {
+  it('arc length of a straight-line "curve" equals its chord length', () => {
+    const f = (t) => ({ x: t * 100, y: 0 })
+    const table = buildArcLengthTable(f)
+    expect(table.total).toBeCloseTo(100, 3)
+  })
+})
+
+describe('core/geometry/bezier', () => {
+  function curvyGeom() {
+    // A visibly bowed S: p0/p1 100 apart, controls offset +-40 perpendicular.
+    return {
+      type: 'bezier',
+      p0: { x: 0, y: 0 },
+      c0: { x: 33, y: -40 },
+      c1: { x: 67, y: 40 },
+      p1: { x: 100, y: 0 }
+    }
+  }
+
+  it('pitch mode spaces consecutive LEDs within 2% of the strip pitch', () => {
+    const geom = curvyGeom()
+    const strip = { ledCount: 15, pitch: 6, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    expect(pts.length).toBe(15)
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      expect(Math.abs(d - strip.pitch) / strip.pitch).toBeLessThan(0.02)
+    }
+  })
+
+  it('pitch mode continues past the curve end along the end tangent', () => {
+    // A short, nearly-straight curve with a strip far longer than it (in LEDs
+    // at this pitch) -- later LEDs must keep real, even spacing in a straight
+    // line continuing from p1, not bunch up at the last sampled point.
+    const geom = { type: 'bezier', p0: { x: 0, y: 0 }, c0: { x: 3, y: 0 }, c1: { x: 7, y: 0 }, p1: { x: 10, y: 0 } }
+    const strip = { ledCount: 10, pitch: 5, spacing: 'pitch' }
+    const pts = sample(geom, strip)
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      expect(d).toBeCloseTo(5, 1)
+    }
+    // Past the curve (length 10), LEDs should continue along +x (the end tangent).
+    expect(pts[9].y).toBeCloseTo(0, 6)
+    expect(pts[9].x).toBeGreaterThan(geom.p1.x)
+  })
+
+  it('fit mode places the first and last LED exactly at p0 and p1', () => {
+    const geom = curvyGeom()
+    const strip = { ledCount: 8, spacing: 'fit' }
+    const pts = sample(geom, strip)
+    expect(pts[0]).toEqual({ x: geom.p0.x, y: geom.p0.y })
+    expect(pts[pts.length - 1].x).toBeCloseTo(geom.p1.x, 6)
+    expect(pts[pts.length - 1].y).toBeCloseTo(geom.p1.y, 6)
+  })
+
+  it('exposes p0/c0/c1/p1 handles', () => {
+    const geom = curvyGeom()
+    expect(handles(geom, {}).map((h) => h.id)).toEqual(['p0', 'c0', 'c1', 'p1'])
+  })
+
+  it('moving p0 carries c0 with it; c1/p1 untouched', () => {
+    const geom = curvyGeom()
+    const patch = moveHandle(geom, 'p0', { x: 10, y: 10 }, {})
+    expect(patch.geom.p0).toEqual({ x: 10, y: 10 })
+    // c0 moved by the same delta (+10, +10) as p0.
+    expect(patch.geom.c0).toEqual({ x: geom.c0.x + 10, y: geom.c0.y + 10 })
+    expect(patch.geom.c1).toEqual(geom.c1)
+    expect(patch.geom.p1).toEqual(geom.p1)
+  })
+
+  it('moving p1 carries c1 with it', () => {
+    const geom = curvyGeom()
+    const patch = moveHandle(geom, 'p1', { x: 110, y: -10 }, {})
+    expect(patch.geom.p1).toEqual({ x: 110, y: -10 })
+    expect(patch.geom.c1).toEqual({ x: geom.c1.x + 10, y: geom.c1.y - 10 })
+    expect(patch.geom.p0).toEqual(geom.p0)
+  })
+
+  it('moving c0/c1 moves only that control point', () => {
+    const geom = curvyGeom()
+    const patch = moveHandle(geom, 'c1', { x: 70, y: 50 }, {})
+    expect(patch.geom.c1).toEqual({ x: 70, y: 50 })
+    expect(patch.geom.c0).toEqual(geom.c0)
+    expect(patch.geom.p0).toEqual(geom.p0)
+    expect(patch.geom.p1).toEqual(geom.p1)
+  })
+
+  it('shift-snaps a control handle angle (from its own anchor) to 15 degrees', () => {
+    const geom = { type: 'bezier', p0: { x: 0, y: 0 }, c0: { x: 10, y: 0 }, c1: { x: 90, y: 0 }, p1: { x: 100, y: 0 } }
+    const patch = moveHandle(geom, 'c0', { x: 10, y: 6 }, { shiftSnap: true })
+    const angle = (Math.atan2(patch.geom.c0.y - geom.p0.y, patch.geom.c0.x - geom.p0.x) * 180) / Math.PI
+    expect(Math.round(angle) % 15).toBe(0)
+  })
+
+  it('rotate/mirror/scaleAbout transform every control point', () => {
+    const geom = curvyGeom()
+    const center = { x: 50, y: 0 }
+
+    const rotated = rotate(geom, 90, center)
+    expect(rotated.p0.x).toBeCloseTo(50);
+    expect(rotated.p0.y).toBeCloseTo(-50)
+    expect(rotated.p1.x).toBeCloseTo(50)
+    expect(rotated.p1.y).toBeCloseTo(50)
+
+    const mirroredH = mirror(geom, 'h', center)
+    expect(mirroredH.p0).toEqual({ x: 100, y: 0 })
+    expect(mirroredH.p1).toEqual({ x: 0, y: 0 })
+    expect(mirroredH.c0).toEqual({ x: center.x * 2 - geom.c0.x, y: geom.c0.y })
+
+    const scaled = scaleAbout(geom, 2, center)
+    expect(scaled.p0).toEqual({ x: center.x + (geom.p0.x - center.x) * 2, y: geom.p0.y })
+    expect(scaled.p1).toEqual({ x: center.x + (geom.p1.x - center.x) * 2, y: geom.p1.y })
+    expect(scaled.c0.x).toBeCloseTo(center.x + (geom.c0.x - center.x) * 2)
+  })
+
+  it('translate and scale move every control point together', () => {
+    const geom = curvyGeom()
+    const moved = translate(geom, 5, -5)
+    expect(moved.p0).toEqual({ x: 5, y: -5 })
+    expect(moved.p1).toEqual({ x: 105, y: -5 })
+    const scaled = scale(geom, 2)
+    expect(scaled.p0).toEqual({ x: 0, y: 0 })
+    expect(scaled.p1).toEqual({ x: 200, y: 0 })
+  })
+
+  it('curveLength() matches the arc-length table total', () => {
+    const geom = curvyGeom()
+    expect(bezierCurveLength(geom)).toBeGreaterThan(100) // bowed, so longer than the chord
+  })
+
+  it('newStrip defaults a bezier whose p0..p1 span roughly (ledCount-1)*pitch', () => {
+    const strip = newStrip('bezier', { ledCount: 11, pitch: 10, geom: { center: { x: 0, y: 0 } } })
+    const span = Math.hypot(strip.geom.p1.x - strip.geom.p0.x, strip.geom.p1.y - strip.geom.p0.y)
+    expect(span).toBeCloseTo(100, 6)
+  })
+
+  it('layout.computePixels works with a bezier strip and explicit addresses', () => {
+    const project = newProject()
+    const strip = newStrip('bezier', {
+      ledCount: 6,
+      pitch: 10,
+      channel: 0,
+      spacing: 'fit',
+      geom: { p0: { x: 0, y: 0 }, c0: { x: 20, y: -20 }, c1: { x: 40, y: 20 }, p1: { x: 60, y: 0 } }
+    })
+    strip.start = 1
+    project.strips.push(strip)
+    const pixels = computePixels(project)
+    expect(pixels.length).toBe(6)
+    expect(pixels[0]).toMatchObject({ x: 0, y: 0, channel: 0, gap: false })
+    expect(pixels[5]).toMatchObject({ x: 60, y: 0, channel: 0, gap: false })
+    expect(pixels.map((p) => p.global)).toEqual([0, 1, 2, 3, 4, 5])
   })
 })

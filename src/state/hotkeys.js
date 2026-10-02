@@ -22,7 +22,11 @@ export const HOTKEYS = [
   { keys: 'Shift (hold on end handle)', desc: 'Snaps the angle to 15° steps' },
   { keys: 'Ctrl/Cmd (hold on end handle)', desc: 'Also resizes LED count from drag distance' },
   { keys: 'Group/corner resize handle', desc: "Uniform scale anchored at the opposite corner; 'Lock pitch' picks the mode" },
-  { keys: 'I', desc: 'Toggle the reference image lock' }
+  { keys: 'I', desc: 'Toggle the reference image lock' },
+  {
+    keys: 'Bezier handles',
+    desc: 'Drag anchors (p0/p1) to move ends, control points (c0/c1) to bend; Shift snaps a control angle to 15°'
+  }
 ]
 
 // One muted line at the right end of the toolbar. Hidden while typing in a
@@ -32,6 +36,7 @@ export const CONTEXT_HINTS = {
   idle: 'Drag: select · Scroll/Space-drag: pan · Pinch/Ctrl+wheel: zoom · F: fit · S: snap',
   selection: 'Drag: move · ⌘D: duplicate · [ ]: rotate 90° · Del: delete · Esc: deselect',
   endHandleDrag: 'Shift: 15° · ⌘/Ctrl: change LED count · Alt: invert snap',
+  bezierHandleDrag: 'Drag anchors to move ends · drag controls to bend · Shift: 15°',
   groupResizeDrag: 'Lock pitch: on/off',
   calibrate: 'Click two points a known distance apart · Esc: cancel',
   typing: ''

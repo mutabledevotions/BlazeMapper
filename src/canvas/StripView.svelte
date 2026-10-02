@@ -16,6 +16,15 @@
   )
   const pathD = $derived(points.length > 1 ? 'M ' + points.map((p) => `${p.x},${p.y}`).join(' L ') : '')
 
+  // True curve path (bezier only) -- the LED path above already follows the
+  // sampled arc-length points, this is just a faint guide showing the exact
+  // underlying curve, including past the last LED if pitch mode ran short of it.
+  const curvePathD = $derived.by(() => {
+    const g = strip.geom
+    if (g.type !== 'bezier') return ''
+    return `M ${g.p0.x},${g.p0.y} C ${g.c0.x},${g.c0.y} ${g.c1.x},${g.c1.y} ${g.p1.x},${g.p1.y}`
+  })
+
   // Wire order: reversed strips start at their last geometric point.
   const wireStart = $derived(strip.reversed ? points.length - 1 : 0)
   const chevron = $derived.by(() => {
@@ -40,6 +49,17 @@
 </script>
 
 <g class="strip" class:selected class:locked={strip.locked} onpointerdown={pointerDown}>
+  {#if curvePathD}
+    <path
+      d={curvePathD}
+      stroke={strip.color}
+      stroke-width="1.5"
+      fill="none"
+      opacity="0.3"
+      stroke-dasharray="4 3"
+      vector-effect="non-scaling-stroke"
+    />
+  {/if}
   {#if pathD}
     <path d={pathD} stroke={strip.color} stroke-width={2 * px} fill="none" opacity="0.6" />
   {/if}

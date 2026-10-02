@@ -12,6 +12,7 @@
   } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
   import { quantizeAngle } from '../core/geometry/line.js'
+  import { curveLength } from '../core/geometry/bezier.js'
   import { sample } from '../core/geometry/index.js'
   import { stripsBbox } from '../core/layout.js'
   import { gridStep } from '../core/model.js'
@@ -20,7 +21,10 @@
 
   const strip = $derived(project.strips.find((s) => s.id === selection.primary))
   const isPoints = $derived(strip?.geom.type === 'points')
+  const isBezier = $derived(strip?.geom.type === 'bezier')
   const isFit = $derived(strip?.spacing === 'fit')
+  const bezierLength = $derived(isBezier ? curveLength(strip.geom) : 0)
+  const bezierFitCount = $derived(isBezier && strip.pitch > 0 ? Math.floor(bezierLength / strip.pitch) + 1 : 0)
   const multi = $derived(selection.ids.length > 1)
   const selectedStrips = $derived(project.strips.filter((s) => selection.ids.includes(s.id)))
 
@@ -158,7 +162,7 @@
             Y ({project.units})
             <input type="number" step="any" value={fmt(originRel.y)} onchange={(e) => setOriginY(parseFloat(e.target.value) || 0)} />
           </label>
-          {#if !multi && strip && !isPoints}
+          {#if !multi && strip && !isPoints && !isBezier}
             <label class="num">
               Angle (deg)
               <input
@@ -205,6 +209,12 @@
             <option value="fit">Fit (spread between endpoints)</option>
           </select>
         </label>
+
+        {#if isBezier}
+          <p class="hint">
+            Curve length {fmt(bezierLength)} {project.units}{#if !isFit} (fits {bezierFitCount} LEDs at pitch){/if}
+          </p>
+        {/if}
 
         {#if !isFit}
           <label>

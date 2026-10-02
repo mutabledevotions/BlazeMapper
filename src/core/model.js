@@ -50,7 +50,11 @@ export function newStrip(geomType = 'line', opts = {}) {
     kind: opts.kind || 'strip', // 'strip' | 'pixel' (standalone point LED)
     geom: null
   }
-  base.geom = newGeom(geomType, opts.geom)
+  // Bezier's default shape depends on the strip's own ledCount/pitch (sized so
+  // a default strip roughly fits), so it needs those resolved values, not just
+  // whatever opts.geom itself carries.
+  const geomOpts = geomType === 'bezier' ? { ledCount: base.ledCount, pitch: base.pitch, ...opts.geom } : opts.geom
+  base.geom = newGeom(geomType, geomOpts)
   // Points strips have no pitch/ledCount of their own -- ledCount mirrors the point
   // list so the strip list / export summary read naturally without special-casing.
   if (geomType === 'points' && opts.ledCount === undefined) {
@@ -72,6 +76,36 @@ function newGeom(type, opts = {}) {
     return {
       type: 'points',
       pts: opts.pts ? opts.pts.map((p) => ({ x: p.x, y: p.y })) : []
+    }
+  }
+  if (type === 'bezier') {
+    if (opts.p0 && opts.c0 && opts.c1 && opts.p1) {
+      return {
+        type: 'bezier',
+        p0: { x: opts.p0.x, y: opts.p0.y },
+        c0: { x: opts.c0.x, y: opts.c0.y },
+        c1: { x: opts.c1.x, y: opts.c1.y },
+        p1: { x: opts.p1.x, y: opts.p1.y }
+      }
+    }
+    // Default: a gentle S from the view centre, p0..p1 spanning roughly
+    // (ledCount - 1) * pitch so a default strip's LEDs land close to real
+    // pitch spacing, controls at 1/3 and 2/3 along, offset perpendicular with
+    // opposite sign for the S bend.
+    const center = opts.center || { x: 0, y: 0 }
+    const ledCount = Math.max(1, opts.ledCount ?? 10)
+    const pitch = opts.pitch > 0 ? opts.pitch : 16.667
+    const span = Math.max(pitch, (ledCount - 1) * pitch)
+    const half = span / 2
+    const p0 = { x: center.x - half, y: center.y }
+    const p1 = { x: center.x + half, y: center.y }
+    const bow = span * 0.25
+    return {
+      type: 'bezier',
+      p0,
+      c0: { x: p0.x + span / 3, y: p0.y - bow },
+      c1: { x: p0.x + (span * 2) / 3, y: p0.y + bow },
+      p1
     }
   }
   throw new Error(`unknown geometry type: ${type}`)
