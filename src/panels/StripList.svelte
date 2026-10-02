@@ -150,7 +150,7 @@
             <button class="row" onclick={(evt) => onRowClick(strip, evt)}>
               <span class="swatch" style:background={strip.color}></span>
               <span class="name">{strip.name}</span>
-              <span class="meta">{ledLabel(strip)} LED</span>
+              <span class="meta">{strip.kind === 'pixel' ? 'pixel' : `${ledLabel(strip)} LED`}</span>
             </button>
             <button class="del" title="Delete" onclick={() => removeStrip(strip.id)}>&times;</button>
           </li>

@@ -677,6 +677,7 @@
       <StripView
         {strip}
         selected={selection.ids.includes(strip.id)}
+        showLabel={strip.kind !== 'pixel' || selection.ids.length === 1}
         {px}
         onDragStart={(evt) => startStripDrag(strip.id, evt)}
       />

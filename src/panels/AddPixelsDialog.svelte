@@ -1,12 +1,13 @@
 <script>
   // Small dialog: N standalone pixels, laid out in a row at the view centre.
-  import { addPixelsStrip, project } from '../state/project.svelte.js'
+  import { addPixels, project } from '../state/project.svelte.js'
   import { gridStep } from '../core/model.js'
   import Help from './Help.svelte'
 
   let dialogEl
   let count = $state(10)
   let spacing = $state(gridStep(project))
+  let channel = $state(0)
 
   export function open() {
     count = 10
@@ -16,7 +17,7 @@
 
   function submit(evt) {
     evt.preventDefault()
-    addPixelsStrip(count, spacing)
+    addPixels(count, spacing, Math.max(0, channel | 0))
     dialogEl.close()
   }
 </script>
@@ -35,7 +36,14 @@
       </span>
       <input type="number" min="0.01" step="any" bind:value={spacing} />
     </label>
-    <p class="hint">Each pixel becomes a draggable point on the canvas, placed at the current view centre.</p>
+    <label>
+      <span class="label-row">
+        Output Expander Channel
+        <Help text="Channel for the new pixels. Each pixel is its own item in the Strips list; drag it there to set its address." />
+      </span>
+      <input type="number" min="0" max="63" step="1" bind:value={channel} />
+    </label>
+    <p class="hint">Adds individual point LEDs (not a strip), in a row at the view centre. Drag each on the canvas to place it.</p>
     <div class="actions">
       <button type="button" onclick={() => dialogEl.close()}>Cancel</button>
       <button type="submit" class="primary">Add</button>

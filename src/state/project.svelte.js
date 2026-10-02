@@ -147,17 +147,28 @@ export function addStrips(opts) {
 }
 
 // "Add pixels": one points strip, N pixels in a row at the view centre.
-export function addPixelsStrip(count, spacing) {
+// N standalone point LEDs, each its own list item (kind 'pixel'), so each one's
+// address is set by its position in the strip list. Laid out in a row at view centre.
+export function addPixels(count, spacing, channel = 0) {
   const n = Math.max(1, count | 0)
   const step = spacing > 0 ? spacing : gridStep(project)
   const startX = view.x - ((n - 1) * step) / 2
-  const pts = []
-  for (let i = 0; i < n; i++) pts.push({ x: startX + i * step, y: view.y })
-
-  const strip = newStrip('points', { pitch: step, geom: { pts } })
-  project.strips.push(strip)
-  selectStrip(strip.id)
-  return strip
+  let num = project.strips.filter((s) => s.kind === 'pixel').length
+  const added = []
+  for (let i = 0; i < n; i++) {
+    num += 1
+    const px = newStrip('points', {
+      kind: 'pixel',
+      name: `Pixel ${num}`,
+      channel,
+      pitch: step,
+      geom: { pts: [{ x: startX + i * step, y: view.y }] }
+    })
+    project.strips.push(px)
+    added.push(px.id)
+  }
+  selectStrips(added)
+  return added
 }
 
 export function updateStrip(id, patch) {

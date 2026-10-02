@@ -92,7 +92,7 @@
     <p class="empty">Select a strip to edit it.</p>
   {:else}
     {#if multi}
-      <p class="empty">{selection.ids.length} strips selected</p>
+      <p class="empty">{selection.ids.length} items selected</p>
     {:else if strip}
       <label>
         Name

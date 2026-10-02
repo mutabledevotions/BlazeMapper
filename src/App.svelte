@@ -2,7 +2,6 @@
   import Toolbar from './panels/Toolbar.svelte'
   import StripList from './panels/StripList.svelte'
   import StripProps from './panels/StripProps.svelte'
-  import ImagePanel from './panels/ImagePanel.svelte'
   import ExportDrawer from './panels/ExportDrawer.svelte'
   import Canvas from './canvas/Canvas.svelte'
   import { setKeyState, clearKeys, setTyping } from './state/project.svelte.js'
@@ -116,7 +115,6 @@
       ></div>
       <div class="pane" style:flex-basis="{(1 - splitPct) * 100}%">
         <StripProps />
-        <ImagePanel />
       </div>
     </aside>
     <main class="canvas-area">

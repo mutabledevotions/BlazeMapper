@@ -18,11 +18,13 @@
   import { gridStep } from '../core/model.js'
   import { contextHint } from '../state/hotkeys.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
+  import ImagePanel from './ImagePanel.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
   import Help from './Help.svelte'
 
   let stripsDialog
   let pixelsDialog
+  let imagePanel
 
   const hasSelection = $derived(selection.ids.length > 0)
 
@@ -44,6 +46,7 @@
   <button onclick={() => pixelsDialog.open()}>Add pixels</button>
   <button disabled title="Phase 5">Add shape</button>
   <button disabled title="Phase 5">Add Bezier</button>
+  <button title="Reference image: load, position, opacity, calibrate" onclick={() => imagePanel.toggle()}>Reference image</button>
 
   <span class="sep"></span>
 
@@ -174,6 +177,7 @@
 
 <AddStripsDialog bind:this={stripsDialog} />
 <AddPixelsDialog bind:this={pixelsDialog} />
+<ImagePanel bind:this={imagePanel} />
 
 <style>
   .toolbar {

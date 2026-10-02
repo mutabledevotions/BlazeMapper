@@ -47,6 +47,7 @@ export function newStrip(geomType = 'line', opts = {}) {
     z: opts.z ?? 0,
     locked: opts.locked ?? false,
     hidden: opts.hidden ?? false,
+    kind: opts.kind || 'strip', // 'strip' | 'pixel' (standalone point LED)
     geom: null
   }
   base.geom = newGeom(geomType, opts.geom)

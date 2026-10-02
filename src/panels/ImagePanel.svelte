@@ -1,9 +1,8 @@
 <script>
   // Reference image controls: load/replace/remove, visible/lock, opacity,
-  // rotation, scale, fit-to-world, and two-point calibration. Lives in the
-  // left sidebar's bottom pane, stacked under Strip properties (that pane
-  // already scrolls, so this just adds to its content rather than needing a
-  // third resizable split).
+  // rotation, scale, fit-to-world, and two-point calibration. Floating
+  // non-modal <dialog> opened from the toolbar; non-modal so calibration
+  // clicks still reach the canvas while it is open.
   import {
     project,
     imageSrc,
@@ -20,6 +19,12 @@
   import Help from './Help.svelte'
 
   let fileInput
+  let dialogEl
+
+  export function toggle() {
+    if (dialogEl.open) dialogEl.close()
+    else dialogEl.show()
+  }
   let realDistance = $state('')
 
   function onFileChange(e) {
@@ -57,8 +62,12 @@
   }
 </script>
 
+<dialog bind:this={dialogEl} class="image-dialog">
 <div class="image-panel">
-  <h3>Reference image</h3>
+  <div class="head">
+    <h3>Reference image</h3>
+    <button class="close" title="Close" onclick={() => dialogEl.close()}>×</button>
+  </div>
 
   <input bind:this={fileInput} type="file" accept="image/*" hidden onchange={onFileChange} />
   <div class="row">
@@ -150,14 +159,40 @@
     <p class="hint">Load a photo or drawing to trace strips over.</p>
   {/if}
 </div>
+</dialog>
 
 <style>
+  .image-dialog {
+    position: fixed;
+    top: 7.5rem;
+    right: 1rem;
+    left: auto;
+    margin: 0;
+    width: 280px;
+    max-height: calc(100vh - 10rem);
+    overflow: auto;
+    padding: 0;
+    background: var(--panel-bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .close {
+    padding: 0 0.4rem;
+    line-height: 1.2;
+  }
   .image-panel {
     padding: 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    border-top: 1px solid var(--border);
   }
   h3 {
     margin: 0 0 0.25rem;
