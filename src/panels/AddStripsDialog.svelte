@@ -64,7 +64,7 @@
   function presetValue(pitch) {
     for (const p of PITCH_PRESETS) {
       const v = +convert(p.pitchMm, 'mm', project.units).toFixed(3)
-      if (Math.abs(v - pitch) < 1e-6) return String(v)
+      if (Math.abs(v - pitch) < 1e-6) return v
     }
     return 'custom'
   }
