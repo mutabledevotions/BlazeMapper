@@ -6,6 +6,7 @@
   import { computePixels } from '../core/layout.js'
   import { toMapJSON, channelSummary } from '../core/export.js'
   import { validateProject } from '../core/validate.js'
+  import Help from './Help.svelte'
 
   const LIMITS = { RGB: 240, RGBW: 180 }
 
@@ -15,7 +16,7 @@
   const warnings = $derived(validateProject(project))
   const hasError = $derived(warnings.some((w) => w.level === 'error'))
 
-  let collapsed = $state(false)
+  let collapsed = $state(true)
   let height = $state(260)
   let resizing = null
 
@@ -87,13 +88,14 @@
           Coordinates are normalized to the world box (0..1). Pixelblaze still rescales the map itself (Fill or Contain) --
           use <strong>Contain</strong> in the Mapper tab to keep the world box's aspect ratio instead of stretching it.
         </p>
-        <label class="chk" title="Experimental, untested on real hardware: appends the world box's own [0,0] and [1,1] corners to the map so Pixelblaze's Fill/Contain normalization can't shift or shrink the layout. Not counted in the pixel total or channel summary.">
+        <label class="chk">
           <input
             type="checkbox"
             checked={project.export.anchors}
             onchange={(e) => setExport({ anchors: e.target.checked })}
           />
           Anchor world corners (experimental)
+          <Help text="Experimental, untested on real hardware: appends the world box's own [0,0] and [1,1] corners to the map so Pixelblaze's Fill/Contain normalization can't shift or shrink the layout. Not counted in the pixel total or channel summary." />
         </label>
       </div>
 
@@ -159,7 +161,7 @@
   .collapse {
     background: none;
     border: none;
-    color: var(--muted);
+    color: var(--accent);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0.1rem 0.3rem;

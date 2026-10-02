@@ -3,6 +3,7 @@
   // code in addStrips() -- matrix just means "count = number of rows".
   import { addStrips, project } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
+  import Help from './Help.svelte'
 
   let dialogEl
 
@@ -89,8 +90,11 @@
         LEDs per strip
         <input type="number" min="1" bind:value={form.ledCount} />
       </label>
-      <label title="Common LED strip densities, converted to the project's units.">
-        Pitch preset
+      <label>
+        <span class="label-row">
+          Pitch preset
+          <Help text="Common LED strip densities, converted to the project's units." />
+        </span>
         <select value={presetValue(form.pitch)} onchange={onPitchPreset}>
           <option value="custom">custom</option>
           {#each PITCH_PRESETS as p}
@@ -102,19 +106,28 @@
         Pitch ({project.units})
         <input type="number" min="0.01" step="any" bind:value={form.pitch} />
       </label>
-      <label title="RGBW strips cap their Output Expander channel at 180 pixels instead of 240.">
-        Color type
+      <label>
+        <span class="label-row">
+          Color type
+          <Help text="RGBW strips cap their Output Expander channel at 180 pixels instead of 240." />
+        </span>
         <select bind:value={form.colorType}>
           <option value="RGB">RGB</option>
           <option value="RGBW">RGBW</option>
         </select>
       </label>
-      <label title="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z.">
-        Z
+      <label>
+        <span class="label-row">
+          Z
+          <Help text="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z." />
+        </span>
         <input type="number" step="1" bind:value={form.z} />
       </label>
-      <label title="Output Expander channel (0-7 per board) for the first strip; with one channel per strip, later strips use the next channels.">
-        Output Expander Channel
+      <label>
+        <span class="label-row">
+          Output Expander Channel
+          <Help text="Output Expander channel (0-7 per board) for the first strip; with one channel per strip, later strips use the next channels." />
+        </span>
         <input type="number" min="0" max="63" bind:value={form.startChannel} />
       </label>
       <label>
@@ -142,9 +155,10 @@
           Row spacing ({project.units})
           <input type="number" min="0" step="any" bind:value={form.rowSpacing} />
         </label>
-        <label class="chk" title="Reverses wire direction on every other row.">
+        <label class="chk">
           <input type="checkbox" bind:checked={form.serpentine} />
           Serpentine
+          <Help text="Reverses wire direction on every other row." />
         </label>
       {/if}
     </div>

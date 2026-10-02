@@ -4,6 +4,7 @@
   import { PITCH_PRESETS, convert } from '../core/units.js'
   import { quantizeAngle } from '../core/geometry/line.js'
   import { sample } from '../core/geometry/index.js'
+  import Help from './Help.svelte'
 
   const strip = $derived(project.strips.find((s) => s.id === selection.primary))
   const isPoints = $derived(strip?.geom.type === 'points')
@@ -59,8 +60,11 @@
         />
       </label>
 
-      <label title="Pitch mode fixes LED spacing to the strip's pitch; length follows LED count. Fit mode spreads the LED count evenly between the two endpoints.">
-        Spacing
+      <label>
+        <span class="label-row">
+          Spacing
+          <Help text="Pitch mode fixes LED spacing to the strip's pitch; length follows LED count. Fit mode spreads the LED count evenly between the two endpoints." />
+        </span>
         <select value={strip.spacing} onchange={(e) => setSpacing(strip.id, e.target.value)}>
           <option value="pitch">Pitch (fixed spacing)</option>
           <option value="fit">Fit (spread between endpoints)</option>
@@ -68,8 +72,11 @@
       </label>
 
       {#if !isFit}
-        <label title="Common LED strip densities, converted to the project's units.">
-          Pitch preset
+        <label>
+          <span class="label-row">
+            Pitch preset
+            <Help text="Common LED strip densities, converted to the project's units." />
+          </span>
           <select onchange={onPitchPreset}>
             <option value="custom">custom ({strip.pitch} {project.units})</option>
             {#each PITCH_PRESETS as p}
@@ -78,8 +85,11 @@
           </select>
         </label>
 
-        <label title="Centre-to-centre LED spacing.">
-          Pitch ({project.units})
+        <label>
+          <span class="label-row">
+            Pitch ({project.units})
+            <Help text="Centre-to-centre LED spacing." />
+          </span>
           <input
             type="number"
             min="0.1"
@@ -89,15 +99,21 @@
           />
         </label>
       {:else}
-        <label title="Derived from LED count and the distance between the two endpoints. Drag the end handle to change it.">
-          Spacing ({project.units}, derived)
+        <label>
+          <span class="label-row">
+            Spacing ({project.units}, derived)
+            <Help text="Derived from LED count and the distance between the two endpoints. Drag the end handle to change it." />
+          </span>
           <input type="number" value={derivedPitch()} readonly disabled />
         </label>
       {/if}
     {/if}
 
-    <label title="The strip's Output Expander channel (0-63). Pixelblaze indices run continuously, channel 0 first.">
-      Channel
+    <label>
+      <span class="label-row">
+        Channel
+        <Help text="The strip's Output Expander channel (0-63). Pixelblaze indices run continuously, channel 0 first." />
+      </span>
       <input
         type="number"
         min="0"
@@ -107,8 +123,11 @@
       />
     </label>
 
-    <label title="RGBW strips cap their Output Expander channel at 180 pixels instead of 240.">
-      Color type
+    <label>
+      <span class="label-row">
+        Color type
+        <Help text="RGBW strips cap their Output Expander channel at 180 pixels instead of 240." />
+      </span>
       <select value={strip.colorType} onchange={(e) => set('colorType', e.target.value)}>
         <option value="RGB">RGB</option>
         <option value="RGBW">RGBW</option>
@@ -116,14 +135,18 @@
     </label>
 
     {#if !isPoints}
-      <label class="chk" title="Flips wire order along this strip without moving it on the canvas.">
+      <label class="chk">
         <input type="checkbox" checked={strip.reversed} onchange={(e) => set('reversed', e.target.checked)} />
         Reversed
+        <Help text="Flips wire order along this strip without moving it on the canvas." />
       </label>
     {/if}
 
-    <label title="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z.">
-      Z
+    <label>
+      <span class="label-row">
+        Z
+        <Help text="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z." />
+      </span>
       <input type="number" step="1" value={strip.z} onchange={(e) => set('z', parseFloat(e.target.value) || 0)} />
     </label>
 
@@ -179,16 +202,7 @@
     gap: 0.4rem;
     color: var(--fg);
   }
-  input,
-  select {
-    background: var(--input-bg);
-    color: var(--fg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.25rem 0.4rem;
-    font-size: 0.85rem;
-  }
-  input:disabled {
-    opacity: 0.7;
+  label.chk :global(.pm-help) {
+    margin-left: 0.2rem;
   }
 </style>

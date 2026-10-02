@@ -1,4 +1,9 @@
 :root {
+  /* Accent lives in one place: every tint derives from it via color-mix() so
+     changing the brand color never means hunting down hard-coded rgba()s. */
+  --accent: #ff9a3c;
+  --accent-dim: color-mix(in srgb, var(--accent) 20%, #14161a);
+  --accent-ring: color-mix(in srgb, var(--accent) 35%, transparent);
   --bg: #15171c;
   --panel-bg: #1c1f26;
   --canvas-bg: #1b1e24;
@@ -6,8 +11,6 @@
   --border: #30343e;
   --fg: #e4e6eb;
   --muted: #8a8f9c;
-  --accent: #7fd1ff;
-  --accent-dim: #2a3b47;
 }
 
 * {
@@ -29,4 +32,72 @@ body {
 
 button {
   font-family: inherit;
+}
+
+/* Shared chrome for every text/number input, select, textarea, and checkbox so
+   individual panels don't each restate the same rules. Panel-specific layout
+   (label flex direction, gaps) stays local to each component. */
+input,
+select,
+textarea {
+  background: var(--input-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  min-height: 1.9rem;
+}
+
+textarea {
+  min-height: 0;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.6;
+}
+
+input[type='checkbox'] {
+  min-height: 0;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 1.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8f9c' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 9px 6px;
+  cursor: pointer;
+}
+
+input[type='number'] {
+  font-variant-numeric: tabular-nums;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* Utility for "label text ... ? help marker" rows: the Help marker's own
+   margin-left: auto does the right-alignment, this just makes the row a flex
+   container so that auto-margin has somewhere to push against. */
+.label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
 }

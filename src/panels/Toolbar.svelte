@@ -1,11 +1,16 @@
 <script>
-  import { project, setGrid, setUnits, toggleSnap, setWorld } from '../state/project.svelte.js'
+  import { project, keys, setGrid, setUnits, toggleSnap, setWorld } from '../state/project.svelte.js'
   import { gridStep } from '../core/model.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
+  import Help from './Help.svelte'
 
   let stripsDialog
   let pixelsDialog
+
+  // Snap button shows the *effective* state (grid.snap XOR Alt held), matching
+  // what dragging would actually do right now.
+  const effectiveSnap = $derived(project.grid.snap !== keys.alt)
 </script>
 
 <div class="toolbar">
@@ -18,11 +23,12 @@
 
   <button
     class="snap-indicator"
-    class:active={project.grid.snap}
+    class:active={effectiveSnap}
     title="Toggle snap to grid (hotkey: S). Hold Alt while dragging to invert temporarily."
     onclick={toggleSnap}
   >
-    Snap {project.grid.snap ? 'on' : 'off'}
+    Snap {effectiveSnap ? 'on' : 'off'}
+    {#if keys.alt}<span class="key-badge">Alt</span>{/if}
   </button>
 
   <label class="chk">
@@ -30,8 +36,11 @@
     Grid
   </label>
 
-  <label class="num" title="Grid lines per world-box edge. Snap step = world size / divisions.">
-    Grid divisions
+  <label class="num">
+    <span class="label-row">
+      Grid divisions
+      <Help text="Grid lines per world-box edge. Snap step = world size / divisions." />
+    </span>
     <input
       type="number"
       min="1"
@@ -44,31 +53,40 @@
 
   <span class="sep"></span>
 
-  <label class="num" title="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage (set width via height on a non-square run). Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it.">
-    World
-    <input
-      type="number"
-      min="1"
-      value={project.world.x}
-      onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
-      title="World origin X"
-    />
-    <input
-      type="number"
-      min="1"
-      value={project.world.y}
-      onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
-      title="World origin Y"
-    />
-    &times;
-    <input
-      type="number"
-      min="0.001"
-      value={project.world.size}
-      onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
-      title="World box size (square)"
-    />
-  </label>
+  <div class="world-fields">
+    <span class="label-row world-title">
+      World
+      <Help
+        text="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage. Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it."
+      />
+    </span>
+    <label class="num">
+      X
+      <input
+        type="number"
+        value={project.world.x}
+        onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
+      />
+    </label>
+    <label class="num">
+      Y
+      <input
+        type="number"
+        value={project.world.y}
+        onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
+      />
+    </label>
+    <label class="num">
+      Size
+      <input
+        type="number"
+        min="0.001"
+        value={project.world.size}
+        onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
+      />
+    </label>
+    <span class="units-suffix">{project.units}</span>
+  </div>
 
   <label class="num">
     Units
@@ -109,9 +127,37 @@
     gap: 0.35rem;
     font-size: 0.85rem;
   }
+  .num {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
   .num input,
   .num select {
     width: 4.5rem;
+  }
+  .label-row {
+    width: 100%;
+  }
+  .world-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+  .world-fields .world-title {
+    align-self: flex-start;
+    font-size: 0.85rem;
+    color: var(--fg);
+    width: auto;
+    margin-right: 0.25rem;
+  }
+  .world-fields .num input {
+    width: 4.2rem;
+  }
+  .units-suffix {
+    color: var(--muted);
+    font-size: 0.78rem;
+    padding-bottom: 0.35rem;
   }
   button {
     background: var(--accent);
@@ -121,6 +167,9 @@
     padding: 0.4rem 0.8rem;
     font-weight: 600;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
   }
   button:hover:not(:disabled) {
     filter: brightness(1.1);
@@ -139,5 +188,13 @@
     background: var(--accent-dim);
     color: var(--accent);
     border-color: var(--accent);
+  }
+  .key-badge {
+    background: var(--accent);
+    color: #0b0d10;
+    border-radius: 999px;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 700;
   }
 </style>

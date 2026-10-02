@@ -7,6 +7,9 @@
     project,
     selection,
     view,
+    keys,
+    ui,
+    setDragMode,
     setView,
     selectStrip,
     selectStrips,
@@ -31,14 +34,16 @@
 
   let svgEl
   let viewBox = $state({ x: -50, y: -50, w: 600, h: 450 })
-  let spaceHeld = $state(false)
-  let altHeld = $state(false)
   let panState = null // { startScreenX, startScreenY, startBox }
   let dragState = null // { ids, startWorld, lastDx, lastDy }
   let marqueeState = $state(null) // { start, current, additive }
   let worldDragState = null // { startWorld, lastDx, lastDy }
   let worldResizeState = null
   let rotateState = null // { center, startAngle, lastDeg }
+  // World-space position of the handle currently being dragged, for the small
+  // "15°" / "LED count" modifier badges -- null when nothing is being dragged.
+  let dragHandlePos = $state(null)
+  let rotateHandlePos = $state(null)
 
   // World units per screen pixel. Labels, handles, markers multiply by this
   // so they keep a constant on-screen size at any zoom or unit.
@@ -140,7 +145,7 @@
   // Snap step = world.size / grid.divisions, snapped relative to the world origin
   // so grid lines, handles, and dragged geometry all agree on where "on-grid" is.
   function snap(v, origin = 0) {
-    const active = altHeld ? !project.grid.snap : project.grid.snap
+    const active = keys.alt ? !project.grid.snap : project.grid.snap
     if (!active) return v
     const s = gridStep(project)
     return origin + Math.round((v - origin) / s) * s
@@ -183,7 +188,7 @@
   }
 
   function onPointerDown(evt) {
-    const isPanTrigger = evt.button === 1 || (evt.button === 0 && spaceHeld)
+    const isPanTrigger = evt.button === 1 || (evt.button === 0 && keys.space)
     if (isPanTrigger) {
       panState = { startClientX: evt.clientX, startClientY: evt.clientY, startBox: { ...viewBox } }
       svgEl.setPointerCapture(evt.pointerId)
@@ -244,6 +249,7 @@
         rotateSelected(delta - rotateState.lastDeg, rotateState.center)
         rotateState.lastDeg = delta
       }
+      rotateHandlePos = pt
       return
     }
     if (dragState) {
@@ -301,12 +307,15 @@
     }
     if (rotateState) {
       rotateState = null
+      rotateHandlePos = null
       svgEl.releasePointerCapture(evt.pointerId)
     }
     if (dragState) {
       svgEl.releasePointerCapture(evt.pointerId)
       dragState = null
     }
+    dragHandlePos = null
+    setDragMode(null)
   }
 
   // pointerdown on an already-selected strip drags the whole selection; on an
@@ -334,6 +343,10 @@
     const world = screenToWorld(evt)
     const pt = { x: snap(world.x, project.world.x), y: snap(world.y, project.world.y) }
     moveHandle(stripId, handleId, pt, { shiftSnap: evt.shiftKey, resize: evt.ctrlKey || evt.metaKey })
+    if (handleId === 'end') {
+      dragHandlePos = pt
+      setDragMode('endHandle')
+    }
   }
 
   function startWorldDrag(evt) {
@@ -368,13 +381,13 @@
     return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
   }
 
+  // keys.* (alt/shift/meta/ctrl/space) is tracked globally by App.svelte's window
+  // listener, shared by the Snap button, drag badges, and the hotkey hint line.
   function onKeyDown(evt) {
-    if (evt.key === 'Alt') altHeld = true
     if (isTypingTarget()) return
     if (evt.code === 'Space') {
       // Stop Space from "clicking" a focused toolbar button or scrolling the page.
       evt.preventDefault()
-      spaceHeld = true
     }
     if (evt.key === 's' || evt.key === 'S') toggleSnap()
     if (evt.key === 'f' || evt.key === 'F') fitView()
@@ -386,10 +399,7 @@
       }
     }
   }
-  function onKeyUp(evt) {
-    if (evt.code === 'Space') spaceHeld = false
-    if (evt.key === 'Alt') altHeld = false
-  }
+  function onKeyUp() {}
 
   const viewBoxStr = $derived(`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`)
   const worldLabel = $derived(`${project.world.size} × ${project.world.size} ${project.units}`)
@@ -402,7 +412,7 @@
 <svg
   bind:this={svgEl}
   class="canvas"
-  class:panning={spaceHeld}
+  class:panning={keys.space}
   viewBox={viewBoxStr}
   preserveAspectRatio="xMidYMid meet"
   onwheel={onWheel}
@@ -486,6 +496,16 @@
     ><title>Drag to rotate the selection (0.5° steps, Shift = 15°)</title></circle>
   {/if}
 
+  {#if dragHandlePos && ui.dragMode === 'endHandle' && keys.shift}
+    <text class="mod-badge" x={dragHandlePos.x + 14 * px} y={dragHandlePos.y - 14 * px} font-size={11 * px}>15°</text>
+  {/if}
+  {#if dragHandlePos && ui.dragMode === 'endHandle' && (keys.ctrl || keys.meta)}
+    <text class="mod-badge" x={dragHandlePos.x + 14 * px} y={dragHandlePos.y + 22 * px} font-size={11 * px}>LED count</text>
+  {/if}
+  {#if rotateHandlePos && keys.shift}
+    <text class="mod-badge" x={rotateHandlePos.x + 14 * px} y={rotateHandlePos.y - 14 * px} font-size={11 * px}>15°</text>
+  {/if}
+
   {#if marqueeRectView}
     <rect
       class="marquee"
@@ -546,8 +566,17 @@
     stroke-width: 0.5;
     cursor: grab;
   }
+  .mod-badge {
+    fill: var(--accent);
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    user-select: none;
+    pointer-events: none;
+  }
   .marquee {
-    fill: rgba(127, 209, 255, 0.12); /* translucent --accent */
+    /* Tint derives from --accent in one place, so the marquee always matches
+       the current accent color instead of a hard-coded rgba(). */
+    fill: color-mix(in srgb, var(--accent) 14%, transparent);
     stroke: var(--accent);
     stroke-width: 1;
     stroke-dasharray: 4 3;

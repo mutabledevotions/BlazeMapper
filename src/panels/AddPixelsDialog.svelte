@@ -2,6 +2,7 @@
   // Small dialog: N standalone pixels, laid out in a row at the view centre.
   import { addPixelsStrip, project } from '../state/project.svelte.js'
   import { gridStep } from '../core/model.js'
+  import Help from './Help.svelte'
 
   let dialogEl
   let count = $state(10)
@@ -27,8 +28,11 @@
       Count
       <input type="number" min="1" bind:value={count} />
     </label>
-    <label title="Defaults to the grid size.">
-      Spacing ({project.units})
+    <label>
+      <span class="label-row">
+        Spacing ({project.units})
+        <Help text="Defaults to the grid size." />
+      </span>
       <input type="number" min="0.01" step="any" bind:value={spacing} />
     </label>
     <p class="hint">Each pixel becomes a draggable point on the canvas, placed at the current view centre.</p>

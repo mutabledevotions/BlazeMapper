@@ -4,6 +4,35 @@
   import StripProps from './panels/StripProps.svelte'
   import ExportDrawer from './panels/ExportDrawer.svelte'
   import Canvas from './canvas/Canvas.svelte'
+  import { setKeyState, clearKeys, setTyping } from './state/project.svelte.js'
+
+  // Single window-level listener for the live modifier-key state (keys in the
+  // store) that the Snap button, drag badges, and the hotkey hint line all read.
+  // Cleared on blur so a key can't get stuck "held" after losing focus mid-press.
+  function onWindowKeyDown(evt) {
+    if (evt.key === 'Alt') setKeyState({ alt: true })
+    if (evt.key === 'Shift') setKeyState({ shift: true })
+    if (evt.key === 'Meta') setKeyState({ meta: true })
+    if (evt.key === 'Control') setKeyState({ ctrl: true })
+    if (evt.code === 'Space') setKeyState({ space: true })
+  }
+  function onWindowKeyUp(evt) {
+    if (evt.key === 'Alt') setKeyState({ alt: false })
+    if (evt.key === 'Shift') setKeyState({ shift: false })
+    if (evt.key === 'Meta') setKeyState({ meta: false })
+    if (evt.key === 'Control') setKeyState({ ctrl: false })
+    if (evt.code === 'Space') setKeyState({ space: false })
+  }
+
+  // Tracks whether a text field/select/textarea has focus, so the toolbar's
+  // hotkey hint line can hide itself while typing.
+  function onWindowFocusIn(evt) {
+    const tag = evt.target?.tagName
+    setTyping(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')
+  }
+  function onWindowFocusOut() {
+    setTyping(false)
+  }
 
   // Strips / Strip properties share the left sidebar as a vertical split so
   // neither pane can grow large enough to cover the other. splitPct is the
@@ -57,6 +86,14 @@
     evt.currentTarget.releasePointerCapture?.(evt.pointerId)
   }
 </script>
+
+<svelte:window
+  onkeydown={onWindowKeyDown}
+  onkeyup={onWindowKeyUp}
+  onblur={clearKeys}
+  onfocusin={onWindowFocusIn}
+  onfocusout={onWindowFocusOut}
+/>
 
 <div class="app">
   <div class="toolbar-row">

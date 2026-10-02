@@ -27,6 +27,44 @@ export function setView(x, y) {
   view.y = y
 }
 
+// Live modifier-key state, set by a single window listener (App.svelte) and read
+// anywhere that needs to show effective-state feedback (Snap button, drag badges,
+// cursor, the hotkey hint line). Cleared on window blur so a key doesn't get
+// stuck "held" after an Alt-Tab or devtools focus steal.
+export const keys = $state({ alt: false, shift: false, meta: false, ctrl: false, space: false })
+
+export function setKeyState(patch) {
+  Object.assign(keys, patch)
+}
+
+export function clearKeys() {
+  keys.alt = false
+  keys.shift = false
+  keys.meta = false
+  keys.ctrl = false
+  keys.space = false
+}
+
+// Transient UI context other components need to read without prop-drilling:
+// dragMode drives the toolbar's hotkey hint line, typing hides it.
+export const ui = $state({ dragMode: null, typing: false })
+
+export function setDragMode(mode) {
+  ui.dragMode = mode
+}
+
+export function setTyping(v) {
+  ui.typing = v
+}
+
+// Group-resize "Lock pitch" toggle (default on). Not part of the project model --
+// it's a tool preference, not saved layout data.
+export const toolState = $state({ lockPitch: true })
+
+export function setLockPitch(v) {
+  toolState.lockPitch = v
+}
+
 export function addStrip(geomType = 'line', opts = {}) {
   const strip = newStrip(geomType, opts)
   project.strips.push(strip)
