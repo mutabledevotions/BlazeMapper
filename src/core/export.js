@@ -6,10 +6,7 @@
 // (p - world.origin) / world.size, which makes the exported numbers identical
 // regardless of which project unit (mm/in/px) was used to draw.
 
-function roundTo(n, decimals) {
-  const f = Math.pow(10, decimals)
-  return Math.round(n * f) / f
-}
+import { roundTo } from './units.js'
 
 function normalize(p, world) {
   const size = world.size || 1

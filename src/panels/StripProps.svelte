@@ -1,5 +1,4 @@
 <script>
-  import { fmt } from '../core/units.js'
   // Hidden/locked toggles moved to the strip list's layer-style icons (Illustrator-style).
   import {
     project,
@@ -10,7 +9,7 @@
     rotateSelectedBy,
     setStripStart
   } from '../state/project.svelte.js'
-  import { PITCH_PRESETS, convert } from '../core/units.js'
+  import { fmt, PITCH_PRESETS, convert, roundTo } from '../core/units.js'
   import { quantizeAngle } from '../core/geometry/line.js'
   import { sample, curveLength as geomCurveLength } from '../core/geometry/index.js'
   import { stripsBbox } from '../core/layout.js'
@@ -48,12 +47,8 @@
     return strip.geom.type === 'points' ? strip.geom.pts[0] || { x: 0, y: 0 } : strip.geom.p0
   })
   const originRel = $derived(
-    originWorld ? { x: round(originWorld.x - project.world.x), y: round(originWorld.y - project.world.y) } : null
+    originWorld ? { x: roundTo(originWorld.x - project.world.x), y: roundTo(originWorld.y - project.world.y) } : null
   )
-
-  function round(n) {
-    return Math.round(n * 1000) / 1000
-  }
 
   function set(field, value) {
     updateStrip(strip.id, { [field]: value })
@@ -474,7 +469,7 @@
     gap: 0.4rem;
     color: var(--fg);
   }
-  label.chk :global(.pm-help) {
+  label.chk :global(.bm-help) {
     margin-left: 0.2rem;
   }
   .readout {

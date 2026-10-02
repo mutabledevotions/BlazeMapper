@@ -43,7 +43,7 @@
 </script>
 
 <span
-  class="pm-help"
+  class="bm-help"
   bind:this={markerEl}
   tabindex="0"
   role="button"
@@ -55,12 +55,12 @@
 >
   ?
   {#if open}
-    <span class="pm-help-box" {style}>{text}</span>
+    <span class="bm-help-box" {style}>{text}</span>
   {/if}
 </span>
 
 <style>
-  .pm-help {
+  .bm-help {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -75,12 +75,12 @@
     cursor: help;
     flex-shrink: 0;
   }
-  .pm-help:hover,
-  .pm-help:focus-visible {
+  .bm-help:hover,
+  .bm-help:focus-visible {
     color: var(--accent);
     outline: none;
   }
-  .pm-help-box {
+  .bm-help-box {
     position: fixed;
     z-index: 100;
     max-width: 260px;

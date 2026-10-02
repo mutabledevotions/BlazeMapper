@@ -25,20 +25,19 @@ function fromMm(mm, unit) {
 
 // Common LED strip densities, expressed as LEDs per metre.
 // Pitch is the centre-to-centre spacing in mm, derived as 1000 / density.
+// Rounds to a fixed number of decimal places (3 by default) -- the one
+// implementation shared by every "round this coordinate/pitch/scale for
+// storage or display" call site in the app, instead of each file re-deriving
+// Math.round(n * 10**d) / 10**d on its own.
+export function roundTo(n, decimals = 3) {
+  const f = 10 ** decimals
+  return Math.round(n * f) / f
+}
+
 export const PITCH_PRESETS = [30, 60, 96, 144].map((perMetre) => ({
   perMetre,
-  pitchMm: round(1000 / perMetre)
+  pitchMm: roundTo(1000 / perMetre)
 }))
-
-export function pitchMmFromDensity(perMetre) {
-  return round(1000 / perMetre)
-}
-
-function round(n) {
-  return Math.round(n * 1000) / 1000
-}
-
-export const UNIT_LABELS = { mm: 'mm', in: 'in', px: 'px' }
 
 // Display formatting: about 5 significant digits by limiting decimals only,
 // so large values (e.g. 200000 mm stage coordinates) keep their integer part.

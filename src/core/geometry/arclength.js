@@ -59,21 +59,6 @@ export function pointAtLength(table, s) {
   return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac }
 }
 
-// Pitch mode: LED i at arc length i * pitch from the start, stopping once
-// that length exceeds the curve's own length (does not extrapolate past the
-// end -- a shape whose LED count should instead keep going past the curve,
-// like bezier.js's strip-fixed-ledCount mode, builds its own loop around
-// pointAtLength + an end-tangent extrapolation instead of calling this).
-export function sampleByPitch(f, pitch, opts = {}) {
-  const table = buildArcLengthTable(f, opts.samples)
-  const points = []
-  const step = pitch > 0 ? pitch : 1e-6
-  for (let s = 0; s <= table.total; s += step) {
-    points.push(pointAtLength(table, s))
-  }
-  return { points, length: table.total, table }
-}
-
 // Fit mode: `count` points evenly spread from one end of the curve to the
 // other (first point at t=0, last at t=1 by arc length, not parameter t).
 export function sampleByFit(f, count, opts = {}) {

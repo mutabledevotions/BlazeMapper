@@ -68,10 +68,6 @@ export function commitDrag() {
   onChange()
 }
 
-export function cancelDrag() {
-  dragBefore = null
-}
-
 export function canUndo() {
   return undoStack.length > 0
 }

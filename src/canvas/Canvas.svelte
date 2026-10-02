@@ -669,6 +669,9 @@
   class:panning={keys.space}
   viewBox={viewBoxStr}
   preserveAspectRatio="xMidYMid meet"
+  role="application"
+  aria-label="Pixel map canvas"
+  tabindex="-1"
   onwheel={onWheel}
   onpointerdown={onPointerDown}
   onpointermove={onPointerMove}
@@ -692,6 +695,9 @@
   {/if}
   <rect
     class="world-box"
+    role="button"
+    tabindex="-1"
+    aria-label="World box: drag to move"
     x={project.world.x}
     y={project.world.y}
     width={project.world.size}
@@ -702,6 +708,9 @@
   />
   <text
     class="world-label"
+    role="button"
+    tabindex="-1"
+    aria-label="World box: drag to move"
     x={project.world.x + 6 * px}
     y={project.world.y - 8 * px}
     font-size={12 * px}
@@ -711,6 +720,9 @@
   </text>
   <rect
     class="world-handle"
+    role="button"
+    tabindex="-1"
+    aria-label="Drag to resize the world box (top-left stays fixed)"
     x={project.world.x + project.world.size - handleSize / 2}
     y={project.world.y + project.world.size - handleSize / 2}
     width={handleSize}
@@ -756,7 +768,13 @@
       { id: 'bl', x: selBbox.minX, y: selBbox.maxY, cursor: 'nesw-resize' },
       { id: 'br', x: selBbox.maxX, y: selBbox.maxY, cursor: 'nwse-resize' }
     ] as c (c.id)}
-      <g style:cursor={c.cursor} onpointerdown={(evt) => startGroupResize(c.id, evt)}>
+      <g
+        style:cursor={c.cursor}
+        role="button"
+        tabindex="-1"
+        aria-label="Drag to scale the selection from the opposite corner"
+        onpointerdown={(evt) => startGroupResize(c.id, evt)}
+      >
         <title>Drag to scale the selection from the opposite corner ("Lock pitch" in the toolbar picks the mode)</title>
         <!-- Clickable area 10% larger than the drawn square. -->
         <rect class="handle-hit" x={c.x - handleSize * 0.55} y={c.y - handleSize * 0.55} width={handleSize * 1.1} height={handleSize * 1.1} />
@@ -784,6 +802,9 @@
     />
     <circle
       class="group-rotate-handle"
+      role="button"
+      tabindex="-1"
+      aria-label="Drag to rotate the selection"
       cx={groupBbox.maxX + 17 * px}
       cy={groupBbox.maxY + 17 * px}
       r={6 * px}
@@ -815,6 +836,9 @@
   {#if calibration.active}
     <rect
       class="calib-overlay"
+      role="button"
+      tabindex="-1"
+      aria-label="Click two points a known distance apart"
       x={viewBox.x - 10000}
       y={viewBox.y - 10000}
       width="20000"

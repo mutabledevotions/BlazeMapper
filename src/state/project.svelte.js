@@ -19,7 +19,7 @@ import {
   sample as geomSample
 } from '../core/geometry/index.js'
 import { stripsBbox } from '../core/layout.js'
-import { convert } from '../core/units.js'
+import { convert, roundTo } from '../core/units.js'
 import { fitToBox, calibrateScale, convertImageUnits } from '../core/image.js'
 import { lastAddress, setStart, ensureAddresses, endAddress } from '../core/address.js'
 import { fitPointsToWorld } from '../core/import.js'
@@ -607,23 +607,19 @@ export function setUnits(units) {
   const k = convert(1, from, units)
   for (const strip of project.strips) {
     strip.geom = geomScale(strip.geom, k)
-    strip.pitch = round3(strip.pitch * k)
+    strip.pitch = roundTo(strip.pitch * k)
   }
-  project.world.x = round3(project.world.x * k)
-  project.world.y = round3(project.world.y * k)
-  project.world.size = round3(project.world.size * k)
+  project.world.x = roundTo(project.world.x * k)
+  project.world.y = roundTo(project.world.y * k)
+  project.world.size = roundTo(project.world.size * k)
   if (project.image) {
     const converted = convertImageUnits(project.image, k)
-    project.image.x = round3(converted.x)
-    project.image.y = round3(converted.y)
-    project.image.scale = round3(converted.scale)
+    project.image.x = roundTo(converted.x)
+    project.image.y = roundTo(converted.y)
+    project.image.scale = roundTo(converted.scale)
   }
   project.units = units
   historyCommit()
-}
-
-function round3(n) {
-  return Math.round(n * 1000) / 1000
 }
 
 export function setExport(patch) {

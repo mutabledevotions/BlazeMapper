@@ -95,6 +95,9 @@
     {#if isBezier && (h.id === 'c0' || h.id === 'c1')}
       <g
         class="ctrl"
+        role="button"
+        tabindex="-1"
+        aria-label={tooltip(h)}
         onpointerdown={(evt) => pointerDown(h.id, evt)}
         onpointermove={pointerMove}
         onpointerup={pointerUp}
@@ -106,6 +109,9 @@
     {:else if h.id === 'center'}
       <g
         class="center"
+        role="button"
+        tabindex="-1"
+        aria-label={tooltip(h)}
         onpointerdown={(evt) => pointerDown(h.id, evt)}
         onpointermove={pointerMove}
         onpointerup={pointerUp}
@@ -117,6 +123,9 @@
     {:else}
       <g
         class={h.id.startsWith('pt:') ? 'pt' : h.id}
+        role="button"
+        tabindex="-1"
+        aria-label={tooltip(h)}
         onpointerdown={(evt) => pointerDown(h.id, evt)}
         onpointermove={pointerMove}
         onpointerup={pointerUp}

@@ -74,7 +74,3 @@ export function curveLength(geom) {
   const g = impl(geom)
   return typeof g.curveLength === 'function' ? g.curveLength(geom) : null
 }
-
-export function registerGeometry(type, implementation) {
-  REGISTRY[type] = implementation
-}

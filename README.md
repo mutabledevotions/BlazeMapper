@@ -4,7 +4,7 @@ A browser tool for building Pixelblaze LED pixel maps by placing strips on a can
 
 This is a separate git repository from the parent `pixelBlaze/` patterns project. It has no runtime dependency on anything outside this folder.
 
-## Usage
+## Quick start
 
 ```
 npm install
@@ -13,127 +13,72 @@ npm run build    # produces a single portable dist/index.html
 npm test         # vitest, core/ logic only
 ```
 
-`dist/index.html` is fully self-contained (JS and CSS inlined via vite-plugin-singlefile) and works opened directly from `file://`, with no server and no network access.
+Open the built `dist/index.html` directly from `file://` -- it's fully self-contained (JS/CSS inlined via vite-plugin-singlefile), with no server and no network access.
 
-In dev builds, `window.bm = { store, core, history, persist }` is exposed in the browser console for debugging the project state and core math directly (`window.pm` is kept as a deprecated alias).
+In dev builds, `window.bm = { store, core, history, persist }` is exposed in the browser console for poking at project state and core math directly (`window.pm` is kept as a deprecated alias).
+
+## Features
+
+- **Strips.** Line (fixed-pitch or fit-between-two-points), freeform points (individual pixels), and four curve types -- bezier, arc, circle, polygon -- each sampled by arc length so LED spacing is physically even regardless of curvature.
+- **Selection tools.** Click/shift-click/marquee select; duplicate, mirror H/V, rotate 90°, and a corner-drag group resize with a "Lock pitch" toggle (locked: positions move but pitch/LED count/angle stay fixed; unlocked: full geometric scale).
+- **Addresses.** Every strip/pixel gets a 1-based `start` address within its Output Expander channel. Setting one address pushes any overlapping neighbor forward (insert-and-push); gaps between addressed ranges are real, unaddressed LEDs on the wire and get a placeholder map entry (previous LED's coordinate, or the world origin) so the exported map stays index-dense.
+- **Reference image + calibration.** Load a photo/drawing, position/scale/rotate it under the strips, then two-point calibrate it against a known real-world distance.
+- **World box + normalized export.** A square `project.world` (origin + size, in project units) is the frame every export coordinate normalizes against: `(p - origin) / size`, rounded to 4 decimals. Units are display-only, so the same layout exports identically in mm/in/px. Use **Contain** in the Pixelblaze Mapper tab to preserve the world box's aspect ratio instead of stretching it to fill.
+- **Import/export/save.** Paste or load a Pixelblaze map (relaxed JSON, or a `function (pixelCount)` generator) to import it as a points strip; save/load the whole project as `.blazemap.json` (`.pixelmap.json` from before the rename still imports, as does any JSON object with `version` + a `strips` array); autosave to IndexedDB every 5s.
+- **Wiring preview.** An animated highlight chases through the wire (global index) order, with an optional per-LED index label once zoomed in enough to read.
+- **Undo/redo.** One snapshot per discrete action or drag gesture, not per pointermove.
 
 ## Hotkeys
 
-This list mirrors the `HOTKEYS` table in `src/state/hotkeys.js`, which also backs the toolbar's one-line context hint (idle / selection / mid-drag / typing) -- keep the two in sync by hand when either changes, since there's no build-time doc generation here.
+Single source of truth: `src/state/hotkeys.js` (`HOTKEYS`), which also backs the toolbar's one-line context hint. Keep this table in sync with that file by hand.
 
-- `Ctrl`/`Cmd`+`Z` — undo. `Shift`+`Ctrl`/`Cmd`+`Z` or `Ctrl`+`Y` — redo. Both ignored while typing in a field (native input undo works there instead).
-- `W` — toggle the wiring preview (animated chase through the wire/global-index order).
-- `S` — toggle grid snap. Ignored while a text field, select, or textarea has focus.
-- `Alt` (held during a drag) — temporarily inverts snap for that drag.
-- `F` — fit the view to the world box plus every strip's bounding box.
-- `Space` + drag, or middle-mouse drag — pan the canvas.
-- Mouse wheel — pan; `Ctrl`/`Cmd`+wheel or pinch zooms, anchored at the cursor.
-- Click a strip — select it (canvas or strip list). `Shift`/`Cmd`-click a strip on the canvas — add or remove it from the selection.
-- In the strip list: plain click selects and sets the range anchor, `Ctrl`/`Cmd`-click toggles one row, `Shift`-click selects the range from the anchor in displayed (channel-grouped) order.
-- Left-drag on empty canvas — marquee-select every strip with at least one LED inside the rect; `Shift`/`Cmd` adds to the existing selection instead of replacing it.
-- `Esc` — clear the selection. `Delete`/`Backspace` — remove every selected strip. `Ctrl`/`Cmd`+`D` — duplicate the selection, offset by one grid step. `[`/`]` — rotate the selection -90°/+90° about its bbox centre. Arrow keys — nudge the selection by one grid step (`Shift` = 10x, `Alt` = 1/10). All ignored while a text field, select, or textarea has focus.
-- `Shift` (held while dragging the end handle) — snaps the angle to 15° steps.
-- `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
-- With 1+ strips selected, drag a corner handle on the dashed selection bbox to uniform-scale it anchored at the opposite corner; the toolbar's "Lock pitch" toggle (default on) picks locked (positions move, strip size/pitch/LED count stay fixed) vs. unlocked (full geometric scale, pitch scales too).
-- With 2+ strips selected, drag the handle above the dashed group bbox to rotate the whole selection about its center (0.5° steps, `Shift` = 15°). Locked strips are skipped by every transform above.
-- `I` — toggle the reference image's lock. Ignored while typing in a field, and a no-op with no image loaded.
-- Bezier strips add four handles: squares at the two anchors (`p0`/`p1`, dragging one carries its own control point along with it) and circles at the two control points (`c0`/`c1`, which move independently). `Shift` while dragging a control point snaps its angle, measured from its own anchor, to 15° steps.
-- Arc/circle/polygon strips add a white circular `center` handle (drag to move the whole shape) plus one or two yellow square handles: arc has `start` (radius + start angle) and `sweep` (sweep angle only); circle has `start` (radius + start angle); polygon has `vertex0` (radius + rotation). `Shift` while dragging any of these snaps the angle to 15° steps.
+| Keys | Action |
+|---|---|
+| `Ctrl`/`Cmd`+`Z` | Undo |
+| `Shift`+`Ctrl`/`Cmd`+`Z` or `Ctrl`+`Y` | Redo |
+| `W` | Toggle the wiring preview |
+| `S` | Toggle grid snap |
+| `Alt` (held while dragging) | Temporarily inverts snap |
+| `F` | Fit the view to the world box plus every strip's bbox |
+| `Space`+drag, or middle-mouse drag | Pan |
+| Mouse wheel | Pan; `Ctrl`/`Cmd`+wheel or pinch zooms at the cursor |
+| Click a strip | Select (canvas or strip list) |
+| `Shift`/`Cmd`-click a strip | Add/remove from selection |
+| `Shift`-click in the strip list | Range-select from the last click, in displayed order |
+| Left-drag on empty canvas | Marquee-select |
+| `Esc` | Cancel calibration, else close an open popup, else clear selection |
+| `Delete`/`Backspace` | Remove selected strips |
+| `Ctrl`/`Cmd`+`D` | Duplicate selection (offset one grid step) |
+| `[` / `]` | Rotate selection -90°/+90° about its bbox centre |
+| Arrow keys | Nudge selection one grid step (`Shift`=10x, `Alt`=1/10) |
+| `Shift` on end handle | Snap angle to 15° |
+| `Ctrl`/`Cmd` on end handle | Also resize LED count from drag distance |
+| `I` | Toggle reference image lock |
 
-## Pixelblaze map facts this tool relies on
+All hotkeys are ignored while a text field/select/textarea has focus.
 
-- A map is a top-level JSON array, one entry per pixel, in wire (index) order: `[[x,y],...]` for 2D or `[[x,y,z],...]` for 3D. Pixelblaze tolerates a trailing comma.
+## Pixelblaze notes
+
+- A map is a top-level JSON array, one entry per pixel, in wire (index) order: `[[x,y],...]` (2D) or `[[x,y,z],...]` (3D). Pixelblaze tolerates a trailing comma.
 - Convention is y-down, matching SVG: `[0,0]` is top-left-ish, increasing y goes down.
-- Units are arbitrary. Pixelblaze normalizes the whole map to 0..1 world units (Fill or Contain) before rendering, so exporting real millimetres is fine.
-- An Output Expander board has 8 channels and supports up to 240 RGB or 180 RGBW pixels per channel.
-- Pixelblaze's own pixel index is continuous across Output Expander channels, in channel order — channel 0's pixels come first, then channel 1's, and so on.
+- Units are arbitrary -- Pixelblaze normalizes the whole map to 0..1 (Fill or Contain) before rendering, so exporting real millimetres is fine.
+- An Output Expander board has 8 channels, up to 240 RGB or 180 RGBW pixels per channel (the 3-vs-4-bytes-per-LED difference behind that limit). Pixelblaze's own pixel index is continuous across channels, in channel order.
+- Addressing throughout the UI is LED-level (what Pixelblaze and the Output Expander actually use), with a secondary byte-range readout (`(start-1) * bytesPerLed + 1 .. end * bytesPerLed`) for anyone thinking in DMX-style byte channels.
 
-## Phase 1
+## Architecture
 
-- Project/strip data model, line geometry (pitch mode), layout ordering, map/JSON export.
-- SVG canvas with pan/zoom/grid, drag-to-move strips, drag handles for origin and angle.
-- Strip list, strip property editor, export panel with copy/download and a channel summary with over-limit warnings.
+- `src/core/` -- pure JS, no DOM/Svelte imports, unit-tested directly (`test/core.test.js`):
+  - `model.js` project/strip factories, `units.js` conversion + pitch presets + `roundTo`/`fmt`, `address.js` the push/pack addressing rules, `layout.js` strip-list -> ordered pixel list, `export.js` map JSON + channel summary, `import.js` relaxed-JSON/function parsing, `validate.js` warnings, `image.js` reference-image math, `throttle.js` the autosave throttle state machine.
+  - `geometry/index.js` is a registry dispatching to one module per shape (`line`, `points`, `bezier`, `arc`, `circle`, `polygon`), each implementing the same interface: `sample`, `handles`, `moveHandle`, `translate`, `scale`, `rotate`, `mirror`, `scaleAbout`, `bbox`, and optionally `curveLength`. `arclength.js` holds the shared arc-length-table helpers the four curve types build on.
+- `src/state/` -- Svelte 5 `$state` store (`project.svelte.js`) plus `history.js` (undo/redo snapshots), `persist.js` (serialize + IndexedDB autosave), `localKeys.js` (localStorage helpers), `hotkeys.js` (the table above).
+- `src/canvas/` -- the SVG canvas (`Canvas.svelte`) and its children: `Grid`, `RefImage`, `StripView`, `Handles`, `WiringPreview`, `HintOverlay`.
+- `src/panels/` -- `Toolbar.svelte` (sectioned controls + the Grid/World/Reference-image popups), `GridPanel`/`WorldPanel`/`ImagePanel.svelte` (floating `<dialog>` popups sharing `.floating-panel` chrome from `app.css`), `StripList`/`StripProps.svelte`, `ExportDrawer.svelte`, the Add/Import dialogs, `Help.svelte`.
 
-## Phase 2 (this build)
+### Adding a new geometry type
 
-- **Add strips / Add pixels dialogs.** "Add strip" opens a dialog with every strip property plus a count and a placement mode (parallel rows with optional serpentine, stacked at the cursor, or matrix). "Add pixels" creates N standalone pixels as a `points` strip, laid out in a row at the view centre; each pixel is its own draggable handle. "Add shape" and "Add Bezier" are visible in the toolbar but disabled with a "Phase 5" tooltip.
-- **Points geometry.** A freeform list of individual pixel coordinates (`core/geometry/points.js`), used by "Add pixels" and, eventually, pasted-in map import. Implements the same registry interface (`sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`) as every other geometry.
-- **Channel-grouped strip list.** Strips are grouped under their Output Expander channel and drag-reorderable within and across channel groups. Each row has eye (hide) and padlock (lock) icon toggles, Illustrator-layer style; those checkboxes are gone from the strip property panel.
-- **Strips / Strip properties split.** The two panels share the left sidebar as a resizable vertical split (drag the divider between them); each pane scrolls independently and keeps at least 80px, so Strip properties is always reachable regardless of window height or strip-list length. The split position persists across reloads via `localStorage` when available.
-- **Validation warnings (`core/validate.js`).** Flags a channel over 240 (RGB) or 180 (RGBW) pixels, a channel mixing RGB and RGBW strips, duplicate pixel coordinates, and empty strips. Surfaced as a warnings badge and list in the export drawer.
-- **Fit-mode spacing.** A strip's spacing can be "pitch" (fixed LED spacing, length follows LED count) or "fit" (N LEDs spread evenly between two endpoints, derived spacing shown read-only).
-- **Canvas physical size.** `project.canvas` (default 2000×2000 project units) is set in the toolbar and drawn as a dashed boundary rect; it's rescaled whenever units change.
-- **Bounded pan/zoom.** Panning keeps the view centre inside the union of the canvas rect and every strip's bounding box, plus a margin. Wheel zoom is `exp(deltaY * 0.002)` clamped to ±8% per event and capped at roughly 1.5× that union on zoom-out. `F` fits the view to it.
-- **Export as a bottom drawer.** The export panel moved out of the right sidebar into a collapsible, resizable (drag its top edge) bottom drawer. Its header — pixel count, a warnings badge, and Copy — stays visible even when the drawer is collapsed.
-- **Tooltips** on the Z, pitch, channel, color type, reversed, and spacing fields explain what each one does and how it affects export.
-- No undo, no persistence of the project itself, no reference image, and curves/shapes are still Phase 5 — see the roadmap below.
+1. Add `src/core/geometry/<name>.js` implementing the registry interface above (pure, no DOM).
+2. Register it in `src/core/geometry/index.js`'s `REGISTRY` map.
+3. Add a `newGeom()` case in `src/core/model.js` for sane defaults.
+4. If it should appear in "Add shape", add it to `AddStripsDialog.svelte`'s Shape select.
 
-## Phase 2b (this build)
-
-- **World box replaces canvas size.** `project.world = { x, y, size }` is a square in project units (default 0, 0, 2000 mm), drawn solid with a label. Drag its border or label to move the origin, or its bottom-right corner handle to resize (top-left stays fixed). Strips never move when the world box moves or resizes — it's purely the frame the export normalizes against.
-- **Grid from the world box.** `project.grid.divisions` (default 20) gives a grid step of `world.size / divisions`, anchored at the world origin so grid lines always meet the box's edges. Snap uses this same step. The toolbar's "Grid divisions" field shows the derived step.
-- **Normalized export.** Every exported coordinate is `(p - world.origin) / world.size` (z divided by `world.size`), rounded to 4 decimals by default. Since units are only labels, the export is identical whether the project is drawn in mm, in, or px. A pixel that falls outside the world box triggers an "outside the world box" warning in the export drawer. Pixelblaze still rescales the whole map to its own bounds (Fill or Contain) before rendering, so the drawer notes using **Contain** to keep the world box's aspect ratio instead of stretching it. An experimental "Anchor world corners" checkbox (`project.export.anchors`, off by default, untested on real hardware) appends the normalized `[0,0]` and `[1,1]` corners to the map — these are never counted in the pixel total or channel summary.
-- **Multi-select.** `selection = { ids, primary }`. Click a strip (canvas or strip list) to select it; `Shift`/`Cmd`-click toggles it into or out of the selection. Left-drag on empty canvas draws a marquee that selects every strip with at least one sampled LED inside it (`Shift`/`Cmd` adds instead of replacing). `Esc` clears the selection, `Delete`/`Backspace` removes every selected strip (both ignored while typing in a field). Dragging any selected strip moves the whole selection by the same snapped delta; dragging an unselected strip selects just that one (or toggles it with Shift) and drags only it. With 2+ strips selected, a dashed group bounding box appears with a rotate handle above its top-centre that rotates the whole selection about the bbox centre (0.5° steps, `Shift` = 15°) — locked strips are skipped. Strip properties shows the primary strip's fields, or "N strips selected" when more than one is selected.
-- **Geometry registry gains `rotate`.** Every geometry type (`line`, `points`) now implements `rotate(geom, deg, center)` alongside `sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`, so layout/export still never special-case shape type.
-
-## Phase 2c (this build)
-
-- **Accent orange.** `--accent: #ff9a3c`; `--accent-dim` and the marquee/focus-ring tints all derive from it via `color-mix(in srgb, var(--accent) N%, ...)` in `app.css`, so the brand color changes in one place.
-- **Styled inputs.** Shared rules in `app.css` for every `input`, `select`, `textarea`, and checkbox (panel background, border, radius, padding, accent focus ring, `accent-color` on checkboxes, a styled select arrow and number spinners) instead of each panel restating them.
-- **Help markers.** `Help.svelte` renders a small underlined `?`, right-aligned at the end of a label's line, that opens a styled tooltip box on hover or keyboard focus after ~200ms, clamped to the viewport. It replaces the old `title=` hints on property and dialog labels; buttons keep short native `title`s.
-- **Live modifier feedback.** A global `keys` state (`alt`/`shift`/`meta`/`ctrl`/`space`), set by one window listener and cleared on blur, drives: the Snap button's effective state (`snap XOR alt`) plus an "Alt" badge, a "15°" badge near the handle during any rotate drag, a "LED count" badge during an end-handle drag with Ctrl/Cmd held, and the grab cursor while Space is held.
-- **World X/Y/Size.** The toolbar now shows visible "X", "Y", "Size" labels instead of bundling them behind one tooltip.
-- **Export drawer** starts collapsed; its expand/collapse arrow uses the accent color.
-- **Selection tools.** New geometry registry functions `mirror(geom, axis, center)` and `scaleAbout(geom, k, center)` (line + points). Toolbar buttons (inline SVG icons, enabled only with a selection): Duplicate (`Ctrl`/`Cmd`+`D`, offsets by one grid step, inserts copies right after their originals), Mirror H/V (about the selection bbox centre), Rotate 90° L/R (`[`/`]`, reuses the existing group-rotate action). A corner-resize handle on the selection bbox (shown for 1+ strips) uniform-scales from the opposite corner; "Lock pitch" (default on, toolbar) picks locked (positions move, pitch/LED count/angle fixed) vs. unlocked (full geometric scale, pitch scales too).
-- **Strip list range select.** Click selects and sets an anchor, `Ctrl`/`Cmd`-click toggles one row, `Shift`-click selects the anchor-to-here range in displayed order.
-- **Hotkey hints.** `src/state/hotkeys.js` is the single table backing both this README's hotkey list and the toolbar's right-aligned, context-sensitive hint line (idle / selection / end-handle drag / group-resize drag / hidden while typing).
-- **Strip properties readout.** X/Y (relative to the world origin, in project units, editable) and Angle (single-strip only), plus nudge buttons (`← → ↑ ↓` move by one grid step, `Shift` = 10x, `Alt` = 1/10; `⟲ ⟳` rotate 0.5°, `Shift` = 15°). With a multi-selection the readout shows the group bbox origin and the nudges move/rotate the whole selection.
-
-## Phase 3 (this build)
-
-- **Reference image.** `project.image = { x, y, scale, rotation, opacity, locked, visible }` (x/y = image centre, scale = world units per source pixel) is the saved layout transform; the actual pixel data (`dataUrl`, natural size, file name) lives in a separate, non-project `imageSrc` so it stays out of the project and future undo snapshots. ImagePanel (left sidebar, under Strip properties) loads a file via `<input type="file" accept="image/*">`, then fits it into the world box (Contain, centred) at 50% opacity, unlocked and visible.
-- **Canvas rendering and handles (`src/canvas/RefImage.svelte`).** Rendered above the grid, below the world box and strips. Unlocked and visible: dragging the image body moves it (grid snap applies, `Alt` inverts it, same as strips); a corner handle scales it uniformly about its own centre; a handle protruding from that same corner at 45° rotates it (0.5° steps, `Shift` = 15°). Locked: the image has no pointer events at all, so clicks fall through to strips, the world box, and the marquee.
-- **Two-point calibration.** ImagePanel's "Calibrate scale" button arms calibration mode; the next two canvas clicks (anywhere, `Esc` cancels) drop markers and a connecting line, then ImagePanel's inline form asks for the real-world distance between them. `calibrateScale()` (`src/core/image.js`) scales the image about its own centre so that distance becomes real, while the midpoint of the two clicks stays fixed in world space. The toolbar's hint line shows "Click two points a known distance apart · Esc: cancel" while calibration is active.
-- **Pan/zoom union box** now includes the image's (possibly rotated) bounding box when it's visible, so `F` (fit) and the pan/zoom clamp account for it like they do the world box and every strip.
-- **Not part of the export.** `project.image` is layout metadata for this editor only -- `toMapJSON`/`computePixels` never see it, so the image has no effect on the Pixelblaze map.
-- **`setUnits` converts the image too** (x, y, scale), same as it does the world box and every strip's geometry and pitch.
-- Pure math (`fitToBox`, `calibrateScale`, `imageCorners`/`imageBbox`, `convertImageUnits`) lives in `src/core/image.js`, unit-tested in isolation from the Svelte/DOM/file-reading code that uses it.
-
-## Phase 3b (this build): explicit addresses
-
-- **Every item (strip or pixel) gets a `start`.** A 1-based LED address within its Output Expander channel, claiming `[start, start + ledCount - 1]` (`ledCount` is the points list length for a points/pixel item, else the strip's own `ledCount` field). List order within a channel is ascending `start`; `project.strips`' own array order is kept in sync by reordering only within each channel's array slots, so every existing order-based code path (layout, export, duplicate) keeps working unmodified. Pure math lives in `src/core/address.js`: `ledCount`, `endAddress`, `lastAddress`, `packChannel`, `setStart`, `ensureAddresses`, `reorderChannelSlots`, `bytesPerLed`/`byteRange`.
-- **Insert-and-push editing rule (`setStart`).** Setting an item's start to `S` claims `[S, S+n)`; any other item in the channel that now overlaps is pushed to start right after the end of whatever displaced it, cascading forward. Gaps untouched by an overlap are left alone. Growing an item's `ledCount` (the LED-count field, or Ctrl/Cmd-dragging a line strip's end handle) re-runs the same push for anything it now overlaps; shrinking never pushes, it just opens a gap. Moving an item to a new channel appends it after that channel's current last address.
-- **Locked items are immovable addresses too.** A push that would land on a locked item instead jumps past its end -- the locked item's own `start` never changes, whether it's in the middle of someone else's cascade or the explicit target of a `setStart` call (editing a locked item's own Address field is a no-op). The one exception: re-running the push after a locked item's own `ledCount` grows is allowed, since the locked item itself doesn't move -- only its larger footprint may now need to push its neighbors.
-- **Migration (`ensureAddresses`).** Any item missing a `start` (a fresh project, or one from before this phase) gets packed right after its channel's current last address, in list order; already-addressed items are left exactly where they are. Called once at store init and implicitly by `computePixels`/`validateProject` (so even code that builds `project.strips` by hand, like the test suite, still gets sane addresses) -- every `addStrip`/`addStrips`/`addPixels`/duplicate call also assigns a `start` up front so this is normally a no-op.
-- **Gaps are real LEDs.** Pixelblaze's map is dense (array index = LED index), so `computePixels` (`src/core/layout.js`) emits a placeholder pixel (`gap: true`) for every address a channel doesn't claim. Default placeholder repeats the previous real LED's coordinate (the first real LED's, if the channel starts with a gap); `project.export.gapPlaceholder = 'origin'` puts them at the world box's origin instead (toolbar: export drawer's "Gap placeholder" select). Gap pixels count toward the channel's total and the 240 RGB / 180 RGBW limit, which is now checked against the channel's last claimed address (incl. gaps), not the sum of each strip's own LED count -- `core/validate.js`.
-- **`channelSummary`** (`src/core/export.js`) now reports `used` (real LEDs), `gaps`, and `count` (total incl. gaps) per channel; the export drawer's summary table shows all three.
-- **StripProps "Address" field.** Editable `start`, `-`/`+` nudge buttons (`Shift` = ±10), and a read-only "LEDs 12-21 · bytes 34-63" line. The byte range is `(start-1)*bpp+1 .. end*bpp` (`bpp` 3 for RGB, 4 for RGBW) -- a secondary DMX-style readout for reference; **LED-level addressing is what Pixelblaze and the Output Expander actually use**, and is the only thing `setStart`/export care about. A Help `?` explains the LED-vs-byte distinction and the push rule.
-- **StripList** rows show the address range ("12-21", or just "12" for a single-LED item) instead of a bare LED count, and a thin muted "gap 22-29 (8)" separator row appears between list rows wherever a channel has an unclaimed range. Drag-reorder computes the drop point's address (the preceding row's end + 1, or 1 at a channel's start) and calls `moveStripToAddress`, which applies the same insert-and-push rule as the Address field.
-
-## Phase 4 (this build): history, persistence, import, wiring preview
-
-- **Undo/redo (`src/state/history.js`).** Undo/redo stacks (cap 100) of `structuredClone` snapshots of `project` -- the reference image's data URL (`imageSrc`) was already kept out of `project`, so it was never in scope for these snapshots. Wired once from `project.svelte.js` via `initHistory({ getSnapshot, restoreSnapshot, onChange })` rather than an import cycle. Every discrete store action (add/remove/edit/duplicate/mirror/rotate button/nudge/unit change/etc.) calls `commit()` at the end; a canvas or handle drag instead calls `beginDrag()` at pointerdown and `commitDrag()` at pointerup, which pushes one entry per gesture (not per pointermove) and only if the gesture actually changed something. `Ctrl`/`Cmd`+`Z` undoes, `Shift`+`Ctrl`/`Cmd`+`Z` and `Ctrl`+`Y` redo -- all ignored while typing in a field, so native input undo still works there. Restoring a snapshot drops any selected id that no longer exists in it. Toolbar Undo/Redo buttons (inline SVG) disable themselves when their stack is empty.
-- **Autosave (`src/state/persist.js`).** Every history commit also marks the project dirty; a pure trailing-throttle helper (`src/core/throttle.js`, no timers or DOM, driven by an explicit `now` so it's trivial to unit test) saves at most once per 5s, folding further changes in that window into one trailing save. Saves go through the same `serializeProject()`/`deserializeProject()` used by "Save project", written as a `Blob` to IndexedDB (`pixelmapper` db, `autosave` store, key `current`). All IndexedDB access is wrapped in try/catch; if it's unavailable the export drawer header shows "Autosave unavailable" and the app otherwise keeps working. On startup, an in-app banner (not `confirm()`) offers "Restore autosave from \<time\>?" with Restore/Discard when a record exists. The header otherwise shows "Saved hh:mm:ss" or "Unsaved changes".
-- **Import (`src/core/import.js`, pure, + `ImportDialog.svelte`).** `detectFormat()` tells a Pixelblaze map (relaxed JSON -- `//` and `/* */` comments and a trailing comma are stripped before `JSON.parse`) apart from a JS generator function (`function (pixelCount) {...}`, evaluated via `new Function` only on the dialog's explicit "Evaluate" click, never automatically) and a PixelMapper project file (an object with a `strips` array). A map's points are fit (contain, keep aspect, centred) into the current world box and become one `points` strip named "Imported map", wire order preserved, placed at the next free address on the chosen channel. A project file replaces the project after an in-dialog confirm checkbox, splitting the reference image's data back out of the save-record shape first. The dialog takes a file or a pasted textarea, shows the detected format (or an error), and a pixelCount field only appears for a detected function.
-- **Export drawer header buttons:** Import, Copy map, Download map, Save project (the existing Copy/Download buttons were renamed "Copy map"/"Download map" to sit next to "Save project", which downloads `serializeProject()`'s output -- the project's own fields plus the reference image data -- as `project.pixelmap.json`).
-- **Wiring preview (`src/canvas/WiringPreview.svelte` + toolbar toggle, hotkey `W`).** An animated highlight chases through the global (wire) index order via `computePixels()`, skipping gap placeholders, at an adjustable speed (LEDs/sec slider in the toolbar, default 30) with a trailing fade over the last 5 LEDs. An optional "Labels" toggle shows each LED's global index, but only once the on-screen spacing between consecutive same-strip LEDs is legible (over ~14px), so it never shows at low zoom.
-- **Known gap:** the data model gives each strip/pixel a single `z` (not per-point), so a 3D import's per-point Z values are not preserved -- only X/Y are placed; see `core/import.js`'s `fitPointsToWorld`.
-
-## Phase 5 (this build): bezier, arc, circle, polygon
-
-- **`core/geometry/arclength.js`.** Shared, shape-agnostic arc-length helper for any parametric curve `f(t) -> {x, y}`, `t` in `[0, 1]`: `buildArcLengthTable(f, samples = 256)` samples the curve at even `t` steps into a piecewise-linear lookup table (points + cumulative length + total), `pointAtLength(table, s)` finds the point at arc length `s` by binary search + linear interpolation within the bracketing segment, and `sampleByPitch`/`sampleByFit` build on those for "LEDs every `pitch` of arc length, stopping at the curve's end" and "`N` LEDs spread evenly end to end" respectively, for **open** paths (bezier, arc). Two more helpers, `sampleByPitchClosed`/`sampleByFitClosed`, do the closed-loop equivalents for circle/polygon: pitch mode wraps `i * pitch` modulo the loop's total length instead of extrapolating past an "end" that doesn't exist, and fit mode spreads `N` points over the whole loop without placing a duplicate point at both `t=0` and `t=1`.
-- **`core/geometry/bezier.js`.** `geom = { type: 'bezier', p0, c0, c1, p1 }`, a single cubic segment. Fit mode spreads `ledCount` LEDs evenly end to end via `sampleByFit`. Pitch mode keeps `ledCount` fixed (like every other strip) and places LEDs at `i * pitch` arc length along the curve; once that exceeds the curve's own length, remaining LEDs continue in a straight line along the curve's end tangent at `p1`, so a strip longer than its curve still gets real, evenly spaced LEDs instead of bunching up at the last sampled point. Four handles: squares at the anchors `p0`/`p1`, circles at the controls `c0`/`c1`. Dragging an anchor carries its own control point along with it (same delta); dragging a control point moves it alone. `Shift` on a control point snaps its angle, measured from its own anchor, to 15° steps.
-- **`core/geometry/arc.js`.** `geom = { type: 'arc', center, radius, startAngle, sweep }` (degrees, `sweep` signed, default 90 -- the toolbar's "90° curve" preset). An open path cut from a circle: pitch mode places LEDs at `i * pitch` along the arc and, like bezier, continues past the arc's own length in a straight line along its end tangent; fit mode spreads `ledCount` LEDs end to end. Three handles: `center` (move, circle-shaped), `start` (square, at the arc's start point -- dragging it changes radius and start angle together, keeping sweep fixed), `sweep` (square, at the end point -- dragging it changes only the sweep; `Shift` snaps to 15°).
-- **`core/geometry/circle.js`.** `geom = { type: 'circle', center, radius, startAngle, direction: 1 | -1 }`, a **closed** loop (`direction` picks which way LED order travels around it). Pitch mode wraps LEDs around the circumference via `sampleByPitchClosed` instead of stopping -- Strip properties warns when `ledCount * pitch` exceeds the circumference, since that means the wire wraps more than once. Fit mode spreads `ledCount` LEDs evenly around the whole circle via `sampleByFitClosed` (no duplicated start point). Two handles: `center` (move) and `start` (radius + start angle, where LED 0 sits).
-- **`core/geometry/polygon.js`.** `geom = { type: 'polygon', center, radius (circumradius), sides (>=3, default 3 = triangle), rotation }`, a **closed** loop traced along the `sides` straight edges (not the circumscribed circle) -- so a square's LEDs sit evenly along its four sides, not on an arc through its corners. Same closed-loop pitch (wraps, warns past the perimeter) and fit (no duplicated start) behaviour as circle. Two handles: `center` (move) and `vertex0` (radius + rotation, where the first vertex sits).
-- **Registry (`core/geometry/index.js`)** gains a `curveLength(geom)` passthrough alongside the existing `sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`/`rotate`/`mirror`/`scaleAbout`, so Strip properties' "Curve length" readout works the same way for all four curve types without naming any of their modules directly. Each type's `curveLength` is an exact closed-form value (not the sampled table's approximation): bezier/arc use the arc-length table's total (bezier has no closed form; arc's is `radius * |sweep in radians|`), circle is `2*pi*radius`, polygon is `sides * 2 * radius * sin(pi/sides)`.
-- **Handles (`canvas/Handles.svelte`).** `center` handles across arc/circle/polygon render as a white circle (cursor `move`); the other angle-driven handle(s) (`start`/`sweep`/`vertex0`) render as the same yellow square `line.js`'s `end` handle uses (cursor `crosshair`), with a faint dashed "spoke" guide line from center to each, matching bezier's control-line treatment. Every handle already goes through the same generic pointerdown/beginDrag/setPointerCapture code line/bezier use -- only the rendering and tooltip switch on `h.id`.
-- **Canvas (`canvas/StripView.svelte`).** The selected curve strip draws its true outline as a faint dashed path underneath the sampled LED path (bezier: a cubic Bezier `C` command; arc: an elliptical `A` arc; circle: two `A` semicircles, since one SVG arc command can't describe a full circle; polygon: straight `L` segments between its vertices, closed with `Z`) -- the LED path itself follows the sampled arc-length points, which can run short of, or wrap past, the true shape depending on spacing mode and pitch.
-- **`newGeom(type, opts)`** (`core/model.js`) sizes each curve's default shape so a fresh 10-LED strip at the current pitch roughly fits it: bezier/arc span `(ledCount - 1) * pitch`; circle's circumference and polygon's perimeter are `ledCount * pitch`. A fully-specified `opts` (explicit `center` + `radius`, e.g. from a handle-drag patch or a test fixture) is used as given instead of re-deriving defaults. Arc's default circle-center is offset so the arc's *midpoint* (not its center of curvature) lands at the view-centre stacking point every "Add shape" placement uses, so a fresh arc visually appears where the user clicked instead of ballooning off to one side.
-- **Toolbar "Add shape"** (previously disabled) opens `AddStripsDialog` with a Shape select -- 90° arc, arc (custom sweep, with a Sweep field), circle, triangle, polygon (with a Sides field) -- plus the same LED/pitch/channel/colour/Z fields as every other add flow. All five always place "stacked" (offset from the view centre by one shape's worth per copy), like bezier. Last-submitted values are remembered per underlying `geomType` (arc/circle/polygon), same scheme as bezier's own memory.
-- **Strip properties** shows the ordinary Spacing (pitch/fit) control for every curve type (no shape-specific code needed there), a generic "Curve length X units (fits N LEDs at pitch)" readout (`fmt()`-formatted) for all four, a wrap-around warning for circle/polygon when `ledCount * pitch` exceeds the perimeter, and the relevant shape fields with Help `?` markers: arc (Radius, Start angle, Sweep), circle (Radius, Start angle, Direction select), polygon (Radius, Sides, Rotation). The Angle field (line-only) is hidden for every curve type, same as it already was for bezier.
-- Addresses, layout, export, validation: untouched, as designed -- every curve type is just another `sample()`-producing geometry to `computePixels`.
-
-## Roadmap
-
-Phase 5 is now complete. No further phases are currently planned.
+Canvas rendering, layout, export, and validation never need to change -- they only ever go through the registry.

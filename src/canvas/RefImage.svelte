@@ -31,11 +31,17 @@
       height={h}
       opacity={image.opacity}
       style:cursor={interactive ? 'move' : 'default'}
+      role="button"
+      tabindex="-1"
+      aria-label="Reference image: drag to move"
       onpointerdown={interactive ? onBodyDown : undefined}
     />
     {#if interactive}
       <rect
         class="scale-handle"
+        role="button"
+        tabindex="-1"
+        aria-label="Drag to scale the image uniformly about its centre"
         x={w / 2 - 5 * px}
         y={h / 2 - 5 * px}
         width={10 * px}
@@ -46,6 +52,9 @@
       <line class="rotate-stem" x1={w / 2} y1={h / 2} x2={rotX} y2={rotY} vector-effect="non-scaling-stroke" />
       <circle
         class="rotate-handle"
+        role="button"
+        tabindex="-1"
+        aria-label="Drag to rotate the image"
         cx={rotX}
         cy={rotY}
         r={6 * px}

@@ -76,7 +76,15 @@
   }
 </script>
 
-<g class="strip" class:selected class:locked={strip.locked} onpointerdown={pointerDown}>
+<g
+  class="strip"
+  class:selected
+  class:locked={strip.locked}
+  role="button"
+  tabindex="-1"
+  aria-label={`Strip ${strip.name}: drag to move`}
+  onpointerdown={pointerDown}
+>
   {#if curvePathD}
     <path
       d={curvePathD}

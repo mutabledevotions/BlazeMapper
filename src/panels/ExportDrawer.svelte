@@ -91,7 +91,15 @@
 
 <div class="export-drawer" style:height={collapsed ? 'auto' : `${height}px`}>
   {#if !collapsed}
-    <div class="resize-handle" onpointerdown={onResizeStart} title="Drag to resize"></div>
+    <div
+      class="resize-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Drag to resize the export drawer"
+      tabindex="-1"
+      onpointerdown={onResizeStart}
+      title="Drag to resize"
+    ></div>
   {/if}
   <div class="header">
     <button class="collapse" onclick={() => (collapsed = !collapsed)} title={collapsed ? 'Expand' : 'Collapse'}>

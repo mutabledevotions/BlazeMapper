@@ -17,7 +17,7 @@ export const HOTKEYS = [
   { keys: 'Shift/Cmd-click a strip', desc: 'Add or remove it from the selection' },
   { keys: 'Shift-click in the strip list', desc: 'Select the range from the last-clicked row, in displayed order' },
   { keys: 'Left-drag on empty canvas', desc: 'Marquee-select every strip with an LED inside the rect' },
-  { keys: 'Esc', desc: 'Clear the selection' },
+  { keys: 'Esc', desc: 'Cancel calibration, else close an open Grid/World/Reference image popup, else clear the selection' },
   { keys: 'Delete / Backspace', desc: 'Remove every selected strip' },
   { keys: 'Ctrl/Cmd+D', desc: 'Duplicate the selection, offset by one grid step' },
   { keys: '[ / ]', desc: "Rotate the selection -90°/+90° about its bbox centre" },
@@ -29,6 +29,10 @@ export const HOTKEYS = [
   {
     keys: 'Bezier handles',
     desc: 'Drag anchors (p0/p1) to move ends, control points (c0/c1) to bend; Shift snaps a control angle to 15°'
+  },
+  {
+    keys: 'Arc/circle/polygon handles',
+    desc: 'White center handle moves the shape; yellow handle(s) set radius/start angle (and sweep, or rotation) -- Shift snaps to 15°'
   }
 ]
 
