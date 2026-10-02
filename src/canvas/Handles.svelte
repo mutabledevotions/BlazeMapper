@@ -4,7 +4,9 @@
   import { beginDrag } from '../state/history.js'
 
   let { strip, px = 1, onHandleDrag } = $props()
-  const size = $derived(10 * px) // 10 screen px
+  const size = $derived(10 * px) // 10 screen px (visible)
+  // Clickable area is a touch larger than the drawn handle.
+  const hit = $derived(size * 1.1)
   const isBezier = $derived(strip.geom.type === 'bezier')
 
   const hs = $derived(handles(strip.geom, strip))
@@ -31,10 +33,14 @@
 
   function pointerDown(id, evt) {
     if (strip.locked) return
+    evt.stopPropagation()
     dragId = id
     beginDrag()
-    evt.currentTarget.setPointerCapture(evt.pointerId)
-    evt.stopPropagation()
+    try {
+      evt.currentTarget.setPointerCapture(evt.pointerId)
+    } catch {
+      // capture can fail for synthetic/stale pointer ids; dragging still works
+    }
   }
 
   function pointerMove(evt) {
@@ -57,39 +63,34 @@
   {/if}
   {#each hs as h (h.id)}
     {#if isBezier && (h.id === 'c0' || h.id === 'c1')}
-      <circle
-        cx={h.x}
-        cy={h.y}
-        r={size / 2}
-        fill="#ffd54f"
+      <g
         class="ctrl"
-        stroke="#222"
-        stroke-width="0.5"
-        vector-effect="non-scaling-stroke"
         onpointerdown={(evt) => pointerDown(h.id, evt)}
         onpointermove={pointerMove}
         onpointerup={pointerUp}
-      ><title>{tooltip(h)}</title></circle>
+      >
+        <title>{tooltip(h)}</title>
+        <circle cx={h.x} cy={h.y} r={hit / 2} class="hit" />
+        <circle cx={h.x} cy={h.y} r={size / 2} fill="#ffd54f" stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
+      </g>
     {:else}
-      <rect
-        x={h.x - size / 2}
-        y={h.y - size / 2}
-        width={size}
-        height={size}
-        fill={h.id === 'end' ? '#ffd54f' : '#fff'}
+      <g
         class={h.id.startsWith('pt:') ? 'pt' : h.id}
-        stroke="#222"
-        stroke-width="0.5"
-        vector-effect="non-scaling-stroke"
         onpointerdown={(evt) => pointerDown(h.id, evt)}
         onpointermove={pointerMove}
         onpointerup={pointerUp}
-      ><title>{tooltip(h)}</title></rect>
+      >
+        <title>{tooltip(h)}</title>
+        <rect x={h.x - hit / 2} y={h.y - hit / 2} width={hit} height={hit} class="hit" />
+        <rect x={h.x - size / 2} y={h.y - size / 2} width={size} height={size} fill={h.id === 'end' ? '#ffd54f' : '#fff'} stroke="#222" stroke-width="0.5" vector-effect="non-scaling-stroke" class="vis" />
+      </g>
     {/if}
   {/each}
 </g>
 
 <style>
+  .hit { fill: transparent; pointer-events: all; }
+  .vis { pointer-events: none; }
   .p0 { cursor: move; }
   .p1 { cursor: move; }
   .end { cursor: crosshair; }

@@ -99,7 +99,7 @@
   <button
     class="snap-indicator"
     class:active={effectiveSnap}
-    title="Toggle snap to grid (hotkey: S). Hold Alt while dragging to invert temporarily."
+    title="Snap to grid (hotkey: S). Off by default: hold Alt while dragging to snap; with snap on, Alt turns it off."
     onclick={toggleSnap}
   >
     Snap {effectiveSnap ? 'on' : 'off'}

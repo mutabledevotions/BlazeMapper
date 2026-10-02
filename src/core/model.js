@@ -13,7 +13,7 @@ export function newProject() {
   return {
     version: 1,
     units: 'mm',
-    grid: { divisions: 20, snap: true, show: true },
+    grid: { divisions: 20, snap: false, show: true },
     world: { x: 0, y: 0, size: 2000 },
     image: null, // { x, y, scale, rotation, opacity, locked, visible } once loaded; src lives outside the project (see state/project.svelte.js's imageSrc)
     strips: [],

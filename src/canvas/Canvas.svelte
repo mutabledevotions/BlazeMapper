@@ -744,32 +744,36 @@
       { id: 'bl', x: selBbox.minX, y: selBbox.maxY, cursor: 'nesw-resize' },
       { id: 'br', x: selBbox.maxX, y: selBbox.maxY, cursor: 'nwse-resize' }
     ] as c (c.id)}
-      <rect
-        class="resize-handle"
-        x={c.x - handleSize / 2}
-        y={c.y - handleSize / 2}
-        width={handleSize}
-        height={handleSize}
-        style:cursor={c.cursor}
-        vector-effect="non-scaling-stroke"
-        onpointerdown={(evt) => startGroupResize(c.id, evt)}
-      ><title>Drag to scale the selection from the opposite corner ("Lock pitch" in the toolbar picks the mode)</title></rect>
+      <g style:cursor={c.cursor} onpointerdown={(evt) => startGroupResize(c.id, evt)}>
+        <title>Drag to scale the selection from the opposite corner ("Lock pitch" in the toolbar picks the mode)</title>
+        <!-- Clickable area 10% larger than the drawn square. -->
+        <rect class="handle-hit" x={c.x - handleSize * 0.55} y={c.y - handleSize * 0.55} width={handleSize * 1.1} height={handleSize * 1.1} />
+        <rect
+          class="resize-handle"
+          x={c.x - handleSize / 2}
+          y={c.y - handleSize / 2}
+          width={handleSize}
+          height={handleSize}
+          vector-effect="non-scaling-stroke"
+        />
+      </g>
     {/each}
   {/if}
 
   {#if groupBbox}
+    <!-- Rotate handle sticks out of the bottom-right corner at 45°, 24 screen px. -->
     <line
       class="group-rotate-stem"
-      x1={(groupBbox.minX + groupBbox.maxX) / 2}
-      y1={groupBbox.minY}
-      x2={(groupBbox.minX + groupBbox.maxX) / 2}
-      y2={groupBbox.minY - 24 * px}
+      x1={groupBbox.maxX}
+      y1={groupBbox.maxY}
+      x2={groupBbox.maxX + 17 * px}
+      y2={groupBbox.maxY + 17 * px}
       vector-effect="non-scaling-stroke"
     />
     <circle
       class="group-rotate-handle"
-      cx={(groupBbox.minX + groupBbox.maxX) / 2}
-      cy={groupBbox.minY - 24 * px}
+      cx={groupBbox.maxX + 17 * px}
+      cy={groupBbox.maxY + 17 * px}
       r={6 * px}
       onpointerdown={startGroupRotate}
     ><title>Drag to rotate the selection (0.5° steps, Shift = 15°)</title></circle>
@@ -870,7 +874,12 @@
     stroke-width: 0.5;
     cursor: grab;
   }
+  .handle-hit {
+    fill: transparent;
+    pointer-events: all;
+  }
   .resize-handle {
+    pointer-events: none;
     fill: var(--accent);
     stroke: #222;
     stroke-width: 0.5;
