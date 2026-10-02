@@ -2,6 +2,7 @@
   // Hidden/locked toggles moved to the strip list's layer-style icons (Illustrator-style).
   import { project, selection, updateStrip, setSpacing } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
+  import { quantizeAngle } from '../core/geometry/line.js'
   import { sample } from '../core/geometry/index.js'
 
   const strip = $derived(project.strips.find((s) => s.id === selection.stripId))
@@ -129,9 +130,9 @@
         Angle (deg)
         <input
           type="number"
-          step="1"
+          step="0.5"
           value={strip.geom.angle}
-          onchange={(e) => setGeom('angle', parseFloat(e.target.value) || 0)}
+          onchange={(e) => setGeom('angle', quantizeAngle(parseFloat(e.target.value) || 0))}
         />
       </label>
     {/if}

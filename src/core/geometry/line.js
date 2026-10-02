@@ -44,6 +44,12 @@ function endPoint(geom, strip) {
   return { x: geom.p0.x + v.x * len, y: geom.p0.y + v.y * len }
 }
 
+// Angles are stored in 0.5 deg steps (720 per turn); finer precision is noise.
+export function quantizeAngle(deg) {
+  const a = Math.round(deg * 2) / 2
+  return ((a % 360) + 360) % 360
+}
+
 export function handles(geom, strip) {
   const end = endPoint(geom, strip)
   return [
@@ -65,7 +71,8 @@ export function moveHandle(geom, id, pt, opts = {}, strip) {
     const dx = pt.x - geom.p0.x
     const dy = pt.y - geom.p0.y
     let angle = (Math.atan2(dy, dx) * 180) / Math.PI
-    if (opts.shiftSnap) angle = Math.round(angle / 15) * 15
+    angle = opts.shiftSnap ? Math.round(angle / 15) * 15 : quantizeAngle(angle)
+    angle = ((angle % 360) + 360) % 360
     // Default: rotate only, length (ledCount) fixed. opts.resize (Ctrl/Cmd held)
     // also sets ledCount from the drag distance, the old always-resize behaviour.
     if (!opts.resize) {

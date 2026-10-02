@@ -205,3 +205,12 @@ describe('validate', () => {
     expect(validateProject(project)).toEqual([])
   })
 })
+
+import { quantizeAngle } from '../src/core/geometry/line.js'
+describe('angle quantization', () => {
+  it('rounds to 0.5 deg and wraps to 0..360', () => {
+    expect(quantizeAngle(12.26)).toBe(12.5)
+    expect(quantizeAngle(-90.2)).toBe(270)
+    expect(quantizeAngle(720.1)).toBe(0)
+  })
+})

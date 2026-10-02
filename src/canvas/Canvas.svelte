@@ -117,12 +117,23 @@
     return Math.round(v / s) * s
   }
 
+  // Figma-style: plain wheel / two-finger scroll pans; pinch (ctrlKey) or
+  // Ctrl/Cmd+wheel zooms around the cursor.
   function onWheel(evt) {
     evt.preventDefault()
+    if (!evt.ctrlKey && !evt.metaKey) {
+      const lineScale = evt.deltaMode === 1 ? 16 : 1
+      const c = clampCenter(
+        viewBox.x + viewBox.w / 2 + evt.deltaX * lineScale * px,
+        viewBox.y + viewBox.h / 2 + evt.deltaY * lineScale * px
+      )
+      viewBox = { ...viewBox, x: c.x - viewBox.w / 2, y: c.y - viewBox.h / 2 }
+      return
+    }
     const before = screenToWorld(evt)
 
-    // exp(deltaY * 0.002) is smooth on trackpads and clamped to +-8% caps a mouse notch.
-    const factor = Math.min(1.08, Math.max(0.92, Math.exp(evt.deltaY * 0.002)))
+    // Pinch deltas are small, a mouse notch is ~100: scale then clamp to +-8%.
+    const factor = Math.min(1.08, Math.max(0.92, Math.exp(evt.deltaY * 0.01)))
 
     const u = unionBox()
     const unionW = u.maxX - u.minX || project.grid.size * 10
@@ -207,9 +218,13 @@
   }
 
   function onKeyDown(evt) {
-    if (evt.code === 'Space') spaceHeld = true
     if (evt.key === 'Alt') altHeld = true
     if (isTypingTarget()) return
+    if (evt.code === 'Space') {
+      // Stop Space from "clicking" a focused toolbar button or scrolling the page.
+      evt.preventDefault()
+      spaceHeld = true
+    }
     if (evt.key === 's' || evt.key === 'S') toggleSnap()
     if (evt.key === 'f' || evt.key === 'F') fitView()
   }

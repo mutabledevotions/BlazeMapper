@@ -6,7 +6,13 @@
   let { strip, selected, px = 1, onDragStart } = $props()
 
   const points = $derived(sample(strip.geom, strip))
-  const dotRadius = $derived(Math.max(0.8, strip.pitch * 0.3))
+  // ~6 screen px so dots stay clickable at any zoom; grows with pitch when zoomed in,
+  // capped at one pitch (neighbours overlap at most half) when zoomed far out.
+  const dotRadius = $derived(
+    strip.geom.type === 'points'
+      ? 6 * px
+      : Math.min(Math.max(6 * px, strip.pitch * 0.3), strip.pitch)
+  )
   const pathD = $derived(points.length > 1 ? 'M ' + points.map((p) => `${p.x},${p.y}`).join(' L ') : '')
 
   function pointerDown(evt) {
@@ -17,7 +23,7 @@
 
 <g class="strip" class:selected class:locked={strip.locked} onpointerdown={pointerDown}>
   {#if pathD}
-    <path d={pathD} stroke={strip.color} stroke-width={Math.max(0.5, strip.pitch * 0.08)} fill="none" opacity="0.6" />
+    <path d={pathD} stroke={strip.color} stroke-width={2 * px} fill="none" opacity="0.6" />
   {/if}
   {#each points as p, i}
     <circle cx={p.x} cy={p.y} r={dotRadius} fill={strip.color} opacity={i === 0 ? 1 : 0.85} />
