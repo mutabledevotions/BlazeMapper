@@ -80,12 +80,11 @@
   </label>
   <span class="grid-step">({+gridStep(project).toFixed(3)} {project.units}/div)</span>
 
-  <!-- World + translate controls, plus the hint line: grouped so the whole
-       thing drops to its own toolbar row (not item-by-item) once the window
-       gets narrow -- see the media query below. At full width this is
-       `display: contents`, so it's invisible to layout and these read as
-       ordinary toolbar items, identical to before this group existed. -->
-  <div class="world-translate-row">
+  <!-- World + Transform cluster: one flex item, so it wraps to the next toolbar
+       row as a unit. Each group is nowrap; the cluster only splits into two
+       rows when it alone is wider than the toolbar. -->
+  <div class="tb-cluster">
+  <div class="tb-group world-group">
     <div class="world-fields">
       <span class="label-row world-title">
         World
@@ -129,7 +128,9 @@
         <option value="px">px</option>
       </select>
     </label>
+  </div>
 
+  <div class="tb-group transform-group">
     <span class="sep"></span>
 
     <button title="Duplicate selection (Ctrl/Cmd+D)" disabled={!hasSelection} onclick={duplicateSelected}>
@@ -170,9 +171,10 @@
       Lock pitch
       <Help text="Default on. Locked: positions scale, strip size/pitch/LED count stay fixed. Unlocked: full geometric scale, pitch scales too." />
     </label>
-
-    <span class="hint-line">{hintText}</span>
   </div>
+  </div>
+
+  <span class="hint-line">{hintText}</span>
 </div>
 
 <AddStripsDialog bind:this={stripsDialog} />
@@ -237,27 +239,18 @@
     font-size: 0.78rem;
     padding-bottom: 0.35rem;
   }
-  /* World/units/transform-tool/lock-pitch group, plus the hint line. At full
-     width it's `display: contents` -- transparent to layout, so its children
-     are just more items in the single toolbar row (unchanged from before).
-     Below the breakpoint it becomes a real flex row of its own (flex-basis:
-     100% forces the line break) with a top border to visually separate it
-     from row one. */
-  .world-translate-row {
-    display: contents;
+  .tb-cluster {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 1rem;
+    min-width: 0;
   }
-  @media (max-width: 1150px) {
-    .world-translate-row {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 1rem;
-      flex-basis: 100%;
-      width: 100%;
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-      border-top: 1px solid var(--border);
-    }
+  .tb-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 0.75rem;
   }
   button {
     background: var(--accent);
