@@ -8,6 +8,7 @@
   import HintOverlay from './canvas/HintOverlay.svelte'
   import { setKeyState, clearKeys, setTyping, replaceProject } from './state/project.svelte.js'
   import { readAutosave, clearAutosave, deserializeProject } from './state/persist.js'
+  import { readMigrated, writeRaw } from './state/localKeys.js'
 
   // Startup autosave check: an in-app banner (not confirm()) -- see
   // src/state/persist.js for the IndexedDB record shape. Only shown when a
@@ -70,15 +71,12 @@
   // top pane's share of the sidebar's height; MIN_PANE is enforced in px on
   // both panes so each stays reachable at any window height.
   const MIN_PANE = 80
-  const SPLIT_KEY = 'pixelmapper.sidebarSplit'
+  const SPLIT_KEY = 'bm.sidebarSplit'
+  const SPLIT_KEY_LEGACY = 'pixelmapper.sidebarSplit'
 
   function loadSplit() {
-    try {
-      const v = parseFloat(localStorage.getItem(SPLIT_KEY))
-      if (v > 0 && v < 1) return v
-    } catch (err) {
-      // localStorage unavailable (private browsing, file://) -- fall back to default.
-    }
+    const v = parseFloat(readMigrated(SPLIT_KEY, SPLIT_KEY_LEGACY))
+    if (v > 0 && v < 1) return v
     return 0.5
   }
 
@@ -87,11 +85,7 @@
   let dragging = null // { startY, startPct, sidebarHeight }
 
   function saveSplit(v) {
-    try {
-      localStorage.setItem(SPLIT_KEY, String(v))
-    } catch (err) {
-      // Ignore -- persistence is a convenience, not a requirement.
-    }
+    writeRaw(SPLIT_KEY, String(v))
   }
 
   function onDividerPointerDown(evt) {

@@ -1,4 +1,4 @@
-// Parses pasted/loaded input for ImportDialog: either a PixelMapper project
+// Parses pasted/loaded input for ImportDialog: either a BlazeMapper project
 // file, or a Pixelblaze map (relaxed JSON array, or a JS generator function
 // source). Pure -- no DOM, no Svelte; the dialog does file reading and the
 // explicit "evaluate function" click.
@@ -68,7 +68,7 @@ export function evalMapFunction(source, pixelCount) {
 //   { kind: 'empty' }
 //   { kind: 'function' }                           -- needs an explicit pixelCount + Evaluate click
 //   { kind: 'map', points }                         -- relaxed-JSON coordinate array, ready to import
-//   { kind: 'project', data }                       -- a PixelMapper project file ({ version, strips: [...] })
+//   { kind: 'project', data }                       -- a BlazeMapper project file ({ version, strips: [...] })
 //   { kind: 'error', message }
 export function detectFormat(text) {
   const trimmed = (text || '').trim()

@@ -6,7 +6,8 @@
 
 import { initThrottleState, onChange as throttleOnChange, checkDue } from '../core/throttle.js'
 
-const DB_NAME = 'pixelmapper'
+const DB_NAME = 'blazemapper'
+const DB_NAME_LEGACY = 'pixelmapper' // read once on startup if the new db has no record yet
 const DB_VERSION = 1
 const STORE_NAME = 'autosave'
 const RECORD_KEY = 'current'
@@ -50,7 +51,7 @@ export function deserializeProject(record) {
 
 // --- IndexedDB -----------------------------------------------------------
 
-function openDb() {
+function openDb(name = DB_NAME) {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       reject(new Error('IndexedDB unavailable'))
@@ -58,7 +59,7 @@ function openDb() {
     }
     let req
     try {
-      req = indexedDB.open(DB_NAME, DB_VERSION)
+      req = indexedDB.open(name, DB_VERSION)
     } catch (err) {
       reject(err)
       return
@@ -73,20 +74,41 @@ function openDb() {
   })
 }
 
+function readRecord(dbName) {
+  return openDb(dbName).then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly')
+        const req = tx.objectStore(STORE_NAME).get(RECORD_KEY)
+        req.onsuccess = () => resolve(req.result || null)
+        req.onerror = () => reject(req.error)
+      })
+  )
+}
+
 // Resolves to the stored record, or null if there is none or IndexedDB isn't
-// available/working.
+// available/working. If the current ('blazemapper') db has no record yet,
+// falls back to a one-time read of the old 'pixelmapper' db (pre-rename) and,
+// if that has a record, migrates it into the new db -- the old db is left
+// untouched otherwise, never deleted.
 export async function readAutosave() {
+  let record = null
   try {
-    const db = await openDb()
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly')
-      const req = tx.objectStore(STORE_NAME).get(RECORD_KEY)
-      req.onsuccess = () => resolve(req.result || null)
-      req.onerror = () => reject(req.error)
-    })
+    record = await readRecord(DB_NAME)
   } catch (err) {
     return null
   }
+  if (record) return record
+  try {
+    const legacy = await readRecord(DB_NAME_LEGACY)
+    if (legacy) {
+      await writeAutosave(legacy)
+      return legacy
+    }
+  } catch (err) {
+    // No legacy db, or it failed to open -- nothing to migrate.
+  }
+  return null
 }
 
 // Resolves to true on success, false if IndexedDB is unavailable or the

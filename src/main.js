@@ -17,7 +17,9 @@ if (import.meta.env.DEV) {
   }
   const history = await import('./state/history.js')
   const persist = await import('./state/persist.js')
-  window.pm = { store, core, history, persist }
+  const handle = { store, core, history, persist }
+  window.bm = handle
+  window.pm = handle // deprecated alias, kept for existing muscle memory in dev
 }
 
 export default app

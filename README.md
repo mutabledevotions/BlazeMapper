@@ -1,4 +1,4 @@
-# PixelMapper
+# BlazeMapper
 
 A browser tool for building Pixelblaze LED pixel maps by placing strips on a canvas instead of hand-typing coordinate arrays. Strips are drawn with real-world units (mm/in), given a channel and color type, and exported as JSON that pastes straight into the Pixelblaze Mapper tab.
 
@@ -15,7 +15,7 @@ npm test         # vitest, core/ logic only
 
 `dist/index.html` is fully self-contained (JS and CSS inlined via vite-plugin-singlefile) and works opened directly from `file://`, with no server and no network access.
 
-In dev builds, `window.pm = { store, core }` is exposed in the browser console for debugging the project state and core math directly.
+In dev builds, `window.bm = { store, core, history, persist }` is exposed in the browser console for debugging the project state and core math directly (`window.pm` is kept as a deprecated alias).
 
 ## Hotkeys
 

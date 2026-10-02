@@ -64,12 +64,12 @@
   }
 
   function onDownload() {
-    downloadBlob(mapJSON, 'application/json', 'pixelmap.json')
+    downloadBlob(mapJSON, 'application/json', 'map.json')
   }
 
   function onSaveProject() {
     const record = serializeProject($state.snapshot(project), $state.snapshot(imageSrc))
-    downloadBlob(JSON.stringify(record), 'application/json', 'project.pixelmap.json')
+    downloadBlob(JSON.stringify(record), 'application/json', 'project.blazemap.json')
   }
 
   function onResizeStart(evt) {

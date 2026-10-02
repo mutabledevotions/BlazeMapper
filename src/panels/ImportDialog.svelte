@@ -92,7 +92,7 @@
     <label>
       <span class="label-row">
         Map / project JSON, or a generator function
-        <Help text="Paste a Pixelblaze map ([[x,y],...] or [[x,y,z],...], relaxed JSON -- comments and a trailing comma are fine), a `function (pixelCount)` generator, or a PixelMapper project file (.pixelmap.json)." />
+        <Help text="Paste a Pixelblaze map ([[x,y],...] or [[x,y,z],...], relaxed JSON -- comments and a trailing comma are fine), a `function (pixelCount)` generator, or a BlazeMapper project file (.blazemap.json or .pixelmap.json)." />
       </span>
       <textarea rows="8" bind:value={text} placeholder="[[0,0],[10,0],[20,0]]"></textarea>
     </label>
@@ -107,7 +107,7 @@
       {:else if detected.kind === 'function'}
         Detected: JS generator function -- set the pixel count and evaluate it below.
       {:else if detected.kind === 'project'}
-        Detected: PixelMapper project file ({Array.isArray(detected.data.strips) ? detected.data.strips.length : 0} strip{Array.isArray(detected.data.strips) && detected.data.strips.length === 1 ? '' : 's'}).
+        Detected: BlazeMapper project file ({Array.isArray(detected.data.strips) ? detected.data.strips.length : 0} strip{Array.isArray(detected.data.strips) && detected.data.strips.length === 1 ? '' : 's'}).
       {/if}
     </p>
 

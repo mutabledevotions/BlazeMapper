@@ -3,6 +3,7 @@
   // code in addStrips() -- matrix just means "count = number of rows".
   import { addStrips, project } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
+  import { readMigrated, writeRaw } from '../state/localKeys.js'
   import Help from './Help.svelte'
 
   let dialogEl
@@ -44,6 +45,9 @@
   // in and converted if units changed.
   const LENGTH_FIELDS = ['pitch', 'rowSpacing', 'offset', 'z']
   function storeKey() {
+    return `bm.addStrips.last.${geomType}`
+  }
+  function storeKeyLegacy() {
     return `pm.addStrips.last.${geomType}`
   }
 
@@ -57,7 +61,8 @@
 
   function loadLast() {
     try {
-      const saved = JSON.parse(localStorage.getItem(storeKey()))
+      const raw = readMigrated(storeKey(), storeKeyLegacy())
+      const saved = JSON.parse(raw)
       if (!saved || !saved.form) return null
       const f = { ...defaults(), ...saved.form }
       if (saved.units && saved.units !== project.units) {
@@ -70,9 +75,7 @@
   }
 
   function saveLast(f) {
-    try {
-      localStorage.setItem(storeKey(), JSON.stringify({ units: project.units, form: f }))
-    } catch {}
+    writeRaw(storeKey(), JSON.stringify({ units: project.units, form: f }))
   }
 
   let form = $state(defaults())
