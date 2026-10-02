@@ -547,7 +547,7 @@
     cursor: grab;
   }
   .marquee {
-    fill: var(--accent-dim, rgba(79, 195, 247, 0.15));
+    fill: rgba(127, 209, 255, 0.12); /* translucent --accent */
     stroke: var(--accent);
     stroke-width: 1;
     stroke-dasharray: 4 3;
