@@ -1,0 +1,32 @@
+:root {
+  --bg: #15171c;
+  --panel-bg: #1c1f26;
+  --canvas-bg: #1b1e24;
+  --input-bg: #111317;
+  --border: #30343e;
+  --fg: #e4e6eb;
+  --muted: #8a8f9c;
+  --accent: #7fd1ff;
+  --accent-dim: #2a3b47;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#app {
+  height: 100vh;
+}
+
+button {
+  font-family: inherit;
+}
