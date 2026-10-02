@@ -66,6 +66,11 @@ export function moveHandle(geom, id, pt, opts = {}, strip) {
     const dy = pt.y - geom.p0.y
     let angle = (Math.atan2(dy, dx) * 180) / Math.PI
     if (opts.shiftSnap) angle = Math.round(angle / 15) * 15
+    // Default: rotate only, length (ledCount) fixed. opts.resize (Ctrl/Cmd held)
+    // also sets ledCount from the drag distance, the old always-resize behaviour.
+    if (!opts.resize) {
+      return { geom: { ...geom, angle } }
+    }
     const ledCount = Math.max(1, Math.round(Math.hypot(dx, dy) / strip.pitch) + 1)
     return { geom: { ...geom, angle }, ledCount }
   }

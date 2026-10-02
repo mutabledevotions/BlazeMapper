@@ -13,6 +13,7 @@ export function newProject() {
     version: 1,
     units: 'mm',
     grid: { size: 10, snap: true, show: true },
+    canvas: { w: 2000, h: 2000 },
     strips: [],
     export: { round: 2, forceZ: false }
   }
@@ -39,6 +40,11 @@ export function newStrip(geomType = 'line', opts = {}) {
     geom: null
   }
   base.geom = newGeom(geomType, opts.geom)
+  // Points strips have no pitch/ledCount of their own -- ledCount mirrors the point
+  // list so the strip list / export summary read naturally without special-casing.
+  if (geomType === 'points' && opts.ledCount === undefined) {
+    base.ledCount = base.geom.pts.length
+  }
   return base
 }
 
@@ -49,6 +55,12 @@ function newGeom(type, opts = {}) {
       p0: opts.p0 || { x: 0, y: 0 },
       angle: opts.angle ?? 0,
       p1: opts.p1 || null // used only in 'fit' spacing mode
+    }
+  }
+  if (type === 'points') {
+    return {
+      type: 'points',
+      pts: opts.pts ? opts.pts.map((p) => ({ x: p.x, y: p.y })) : []
     }
   }
   throw new Error(`unknown geometry type: ${type}`)

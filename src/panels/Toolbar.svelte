@@ -1,22 +1,32 @@
 <script>
-  import { project, addStrip, setGrid, setUnits } from '../state/project.svelte.js'
+  import { project, setGrid, setUnits, toggleSnap, setCanvasSize } from '../state/project.svelte.js'
+  import AddStripsDialog from './AddStripsDialog.svelte'
+  import AddPixelsDialog from './AddPixelsDialog.svelte'
 
-  function onAddStrip() {
-    addStrip('line', { geom: { p0: { x: 0, y: 0 }, angle: 0 } })
-  }
+  let stripsDialog
+  let pixelsDialog
 </script>
 
 <div class="toolbar">
-  <button onclick={onAddStrip}>Add strip</button>
+  <button onclick={() => stripsDialog.open()}>Add strip</button>
+  <button onclick={() => pixelsDialog.open()}>Add pixels</button>
+  <button disabled title="Phase 5">Add shape</button>
+  <button disabled title="Phase 5">Add Bezier</button>
+
+  <span class="sep"></span>
+
+  <button
+    class="snap-indicator"
+    class:active={project.grid.snap}
+    title="Toggle snap to grid (hotkey: S). Hold Alt while dragging to invert temporarily."
+    onclick={toggleSnap}
+  >
+    Snap {project.grid.snap ? 'on' : 'off'}
+  </button>
 
   <label class="chk">
     <input type="checkbox" checked={project.grid.show} onchange={(e) => setGrid({ show: e.target.checked })} />
     Grid
-  </label>
-
-  <label class="chk">
-    <input type="checkbox" checked={project.grid.snap} onchange={(e) => setGrid({ snap: e.target.checked })} />
-    Snap
   </label>
 
   <label class="num">
@@ -30,6 +40,25 @@
     />
   </label>
 
+  <span class="sep"></span>
+
+  <label class="num" title="Physical canvas bounds, e.g. a 2m x 2m costume or a 200m x 20m stage. Drawn as the dashed boundary rect; press F to fit the view to it.">
+    Canvas
+    <input
+      type="number"
+      min="1"
+      value={project.canvas.w}
+      onchange={(e) => setCanvasSize({ w: parseFloat(e.target.value) || 1 })}
+    />
+    &times;
+    <input
+      type="number"
+      min="1"
+      value={project.canvas.h}
+      onchange={(e) => setCanvasSize({ h: parseFloat(e.target.value) || 1 })}
+    />
+  </label>
+
   <label class="num">
     Units
     <select value={project.units} onchange={(e) => setUnits(e.target.value)}>
@@ -40,6 +69,9 @@
   </label>
 </div>
 
+<AddStripsDialog bind:this={stripsDialog} />
+<AddPixelsDialog bind:this={pixelsDialog} />
+
 <style>
   .toolbar {
     display: flex;
@@ -48,6 +80,12 @@
     padding: 0.5rem 1rem;
     background: var(--panel-bg);
     border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .sep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border);
   }
   .chk,
   .num {
@@ -69,7 +107,22 @@
     font-weight: 600;
     cursor: pointer;
   }
-  button:hover {
+  button:hover:not(:disabled) {
     filter: brightness(1.1);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .snap-indicator {
+    background: var(--input-bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .snap-indicator.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: var(--accent);
   }
 </style>

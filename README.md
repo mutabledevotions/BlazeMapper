@@ -17,6 +17,16 @@ npm test         # vitest, core/ logic only
 
 In dev builds, `window.pm = { store, core }` is exposed in the browser console for debugging the project state and core math directly.
 
+## Hotkeys
+
+- `S` — toggle grid snap. Ignored while a text field, select, or textarea has focus.
+- `Alt` (held during a drag) — temporarily inverts snap for that drag.
+- `Shift` (held while dragging the end handle) — snaps the angle to 15° steps.
+- `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
+- `F` — fit the view to the canvas boundary plus every strip's bounding box.
+- `Space` + drag, or middle-mouse drag — pan the canvas.
+- Mouse wheel — zoom, anchored at the cursor.
+
 ## Pixelblaze map facts this tool relies on
 
 - A map is a top-level JSON array, one entry per pixel, in wire (index) order: `[[x,y],...]` for 2D or `[[x,y,z],...]` for 3D. Pixelblaze tolerates a trailing comma.
@@ -25,16 +35,28 @@ In dev builds, `window.pm = { store, core }` is exposed in the browser console f
 - An Output Expander board has 8 channels and supports up to 240 RGB or 180 RGBW pixels per channel.
 - Pixelblaze's own pixel index is continuous across Output Expander channels, in channel order — channel 0's pixels come first, then channel 1's, and so on.
 
-## Phase 1 (this build)
+## Phase 1
 
 - Project/strip data model, line geometry (pitch mode), layout ordering, map/JSON export.
 - SVG canvas with pan/zoom/grid, drag-to-move strips, drag handles for origin and angle.
 - Strip list, strip property editor, export panel with copy/download and a channel summary with over-limit warnings.
-- No undo, no persistence, no reference image, and only one geometry type (line) yet — see the roadmap below.
+
+## Phase 2 (this build)
+
+- **Add strips / Add pixels dialogs.** "Add strip" opens a dialog with every strip property plus a count and a placement mode (parallel rows with optional serpentine, stacked at the cursor, or matrix). "Add pixels" creates N standalone pixels as a `points` strip, laid out in a row at the view centre; each pixel is its own draggable handle. "Add shape" and "Add Bezier" are visible in the toolbar but disabled with a "Phase 5" tooltip.
+- **Points geometry.** A freeform list of individual pixel coordinates (`core/geometry/points.js`), used by "Add pixels" and, eventually, pasted-in map import. Implements the same registry interface (`sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`) as every other geometry.
+- **Channel-grouped strip list.** Strips are grouped under their Output Expander channel and drag-reorderable within and across channel groups. Each row has eye (hide) and padlock (lock) icon toggles, Illustrator-layer style; those checkboxes are gone from the strip property panel.
+- **Strips / Strip properties split.** The two panels share the left sidebar as a resizable vertical split (drag the divider between them); each pane scrolls independently and keeps at least 80px, so Strip properties is always reachable regardless of window height or strip-list length. The split position persists across reloads via `localStorage` when available.
+- **Validation warnings (`core/validate.js`).** Flags a channel over 240 (RGB) or 180 (RGBW) pixels, a channel mixing RGB and RGBW strips, duplicate pixel coordinates, and empty strips. Surfaced as a warnings badge and list in the export drawer.
+- **Fit-mode spacing.** A strip's spacing can be "pitch" (fixed LED spacing, length follows LED count) or "fit" (N LEDs spread evenly between two endpoints, derived spacing shown read-only).
+- **Canvas physical size.** `project.canvas` (default 2000×2000 project units) is set in the toolbar and drawn as a dashed boundary rect; it's rescaled whenever units change.
+- **Bounded pan/zoom.** Panning keeps the view centre inside the union of the canvas rect and every strip's bounding box, plus a margin. Wheel zoom is `exp(deltaY * 0.002)` clamped to ±8% per event and capped at roughly 1.5× that union on zoom-out. `F` fits the view to it.
+- **Export as a bottom drawer.** The export panel moved out of the right sidebar into a collapsible, resizable (drag its top edge) bottom drawer. Its header — pixel count, a warnings badge, and Copy — stays visible even when the drawer is collapsed.
+- **Tooltips** on the Z, pitch, channel, color type, reversed, and spacing fields explain what each one does and how it affects export.
+- No undo, no persistence of the project itself, no reference image, and curves/shapes are still Phase 5 — see the roadmap below.
 
 ## Roadmap
 
-2. **Batch + channels + pixels.** Dialog to add many strips at once (rows/serpentine, stacked, matrix), channel grouping and reordering in the strip list, validation warnings (duplicate coordinates, empty channels, overlaps), a freeform "points" geometry for individual pixels, and fit-mode spacing (N LEDs spread between two endpoints).
 3. **Reference image.** Load a photo or drawing underneath the canvas, move/rotate/scale it, lock it, and calibrate its scale with a two-point real-world distance click.
 4. **History, persistence, import.** Undo/redo, localStorage autosave, save/load project files, paste-in import of an existing Pixelblaze map (relaxed JSON and JS generator functions), and a wiring preview that animates the chase order.
 5. **Curves and shapes.** Bezier, arc, circle, and polygon geometries, all through the same geometry registry used by line.

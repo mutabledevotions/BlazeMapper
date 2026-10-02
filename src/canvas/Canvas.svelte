@@ -1,7 +1,10 @@
 <script>
   // SVG canvas. World units = project units, y-down (matches Pixelblaze's own convention).
   // Pan: space+drag or middle-mouse drag. Zoom: wheel, anchored at the cursor.
-  import { project, selection, selectStrip, translateStrip, moveHandle } from '../state/project.svelte.js'
+  // Pan/zoom are bounded to the union of the canvas boundary rect and every strip's
+  // bbox (plus a margin), so you can't scroll off into empty space forever.
+  import { project, selection, view, setView, selectStrip, translateStrip, moveHandle, toggleSnap } from '../state/project.svelte.js'
+  import { projectBbox } from '../core/layout.js'
   import Grid from './Grid.svelte'
   import StripView from './StripView.svelte'
   import Handles from './Handles.svelte'
@@ -10,6 +13,7 @@
   let svgEl
   let viewBox = $state({ x: -50, y: -50, w: 600, h: 450 })
   let spaceHeld = $state(false)
+  let altHeld = $state(false)
   let panState = null // { startScreenX, startScreenY, startBox }
   let dragState = null // { stripId, startWorld, startGeomP0 }
 
@@ -36,6 +40,55 @@
     viewBox = { x: viewBox.x * k, y: viewBox.y * k, w: viewBox.w * k, h: viewBox.h * k }
   })
 
+  // Publish the current view centre to the store so "Add strip" / "Add pixels" can place at it.
+  $effect(() => {
+    setView(viewBox.x + viewBox.w / 2, viewBox.y + viewBox.h / 2)
+  })
+
+  // Union of the canvas boundary rect and every strip's bbox -- the space pan/zoom are bounded to.
+  function unionBox() {
+    const rect = { minX: 0, minY: 0, maxX: project.canvas.w, maxY: project.canvas.h }
+    const pb = projectBbox(project)
+    if (!pb) return rect
+    return {
+      minX: Math.min(rect.minX, pb.minX),
+      minY: Math.min(rect.minY, pb.minY),
+      maxX: Math.max(rect.maxX, pb.maxX),
+      maxY: Math.max(rect.maxY, pb.maxY)
+    }
+  }
+
+  function minPitch() {
+    const pitches = project.strips.filter((s) => s.geom.type === 'line').map((s) => s.pitch)
+    return pitches.length ? Math.min(...pitches) : project.grid.size
+  }
+
+  function clampCenter(cx, cy, box) {
+    const u = box || unionBox()
+    const spanX = u.maxX - u.minX
+    const spanY = u.maxY - u.minY
+    const margin = Math.max(spanX, spanY) * 0.5 || project.grid.size * 10
+    return {
+      x: Math.min(Math.max(cx, u.minX - margin), u.maxX + margin),
+      y: Math.min(Math.max(cy, u.minY - margin), u.maxY + margin)
+    }
+  }
+
+  function fitView() {
+    const u = unionBox()
+    const w = Math.max(1, u.maxX - u.minX)
+    const h = Math.max(1, u.maxY - u.minY)
+    const margin = Math.max(w, h) * 0.1
+    const cx = (u.minX + u.maxX) / 2
+    const cy = (u.minY + u.maxY) / 2
+    const aspect = clientSize.w / clientSize.h || 1
+    let vw = w + margin * 2
+    let vh = h + margin * 2
+    if (vw / vh > aspect) vh = vw / aspect
+    else vw = vh * aspect
+    viewBox = { x: cx - vw / 2, y: cy - vh / 2, w: vw, h: vh }
+  }
+
   function screenToWorld(evt) {
     const pt = svgEl.createSVGPoint()
     pt.x = evt.clientX
@@ -47,7 +100,8 @@
   }
 
   function snap(v) {
-    if (!project.grid.snap) return v
+    const active = altHeld ? !project.grid.snap : project.grid.snap
+    if (!active) return v
     const s = project.grid.size
     return Math.round(v / s) * s
   }
@@ -55,12 +109,25 @@
   function onWheel(evt) {
     evt.preventDefault()
     const before = screenToWorld(evt)
-    const factor = evt.deltaY > 0 ? 1.1 : 1 / 1.1
-    const newW = viewBox.w * factor
-    const newH = viewBox.h * factor
+
+    // exp(deltaY * 0.002) is smooth on trackpads and clamped to +-8% caps a mouse notch.
+    const factor = Math.min(1.08, Math.max(0.92, Math.exp(evt.deltaY * 0.002)))
+
+    const u = unionBox()
+    const unionW = u.maxX - u.minX || project.grid.size * 10
+    const unionH = u.maxY - u.minY || project.grid.size * 10
+    const maxW = unionW * 1.5
+    const maxH = unionH * 1.5
+    const minExtent = Math.max(minPitch() * 5, 1e-6)
+
+    const newW = Math.min(maxW, Math.max(minExtent, viewBox.w * factor))
+    const newH = Math.min(maxH, Math.max(minExtent, viewBox.h * factor))
     viewBox = { ...viewBox, w: newW, h: newH }
     const after = screenToWorld(evt)
-    viewBox = { ...viewBox, x: viewBox.x + (before.x - after.x), y: viewBox.y + (before.y - after.y) }
+    let x = viewBox.x + (before.x - after.x)
+    let y = viewBox.y + (before.y - after.y)
+    const center = clampCenter(x + newW / 2, y + newH / 2, u)
+    viewBox = { x: center.x - newW / 2, y: center.y - newH / 2, w: newW, h: newH }
   }
 
   function onPointerDown(evt) {
@@ -80,7 +147,10 @@
     if (panState) {
       const dx = (evt.clientX - panState.startClientX) * px
       const dy = (evt.clientY - panState.startClientY) * px
-      viewBox = { ...panState.startBox, x: panState.startBox.x - dx, y: panState.startBox.y - dy }
+      const rawX = panState.startBox.x - dx
+      const rawY = panState.startBox.y - dy
+      const center = clampCenter(rawX + viewBox.w / 2, rawY + viewBox.h / 2)
+      viewBox = { ...panState.startBox, x: center.x - viewBox.w / 2, y: center.y - viewBox.h / 2 }
       return
     }
     if (dragState) {
@@ -116,17 +186,28 @@
   function onHandleDrag(stripId, handleId, evt) {
     const world = screenToWorld(evt)
     const pt = { x: snap(world.x), y: snap(world.y) }
-    moveHandle(stripId, handleId, pt, { shiftSnap: evt.shiftKey })
+    moveHandle(stripId, handleId, pt, { shiftSnap: evt.shiftKey, resize: evt.ctrlKey || evt.metaKey })
+  }
+
+  function isTypingTarget() {
+    const tag = document.activeElement?.tagName
+    return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
   }
 
   function onKeyDown(evt) {
     if (evt.code === 'Space') spaceHeld = true
+    if (evt.key === 'Alt') altHeld = true
+    if (isTypingTarget()) return
+    if (evt.key === 's' || evt.key === 'S') toggleSnap()
+    if (evt.key === 'f' || evt.key === 'F') fitView()
   }
   function onKeyUp(evt) {
     if (evt.code === 'Space') spaceHeld = false
+    if (evt.key === 'Alt') altHeld = false
   }
 
   const viewBoxStr = $derived(`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`)
+  const boundaryLabel = $derived(`${project.canvas.w} × ${project.canvas.h} ${project.units}`)
 </script>
 
 <svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} />
@@ -146,6 +227,18 @@
   {#if project.grid.show}
     <Grid {viewBox} size={project.grid.size} />
   {/if}
+  <rect
+    class="boundary"
+    x={0}
+    y={0}
+    width={project.canvas.w}
+    height={project.canvas.h}
+    fill="none"
+    vector-effect="non-scaling-stroke"
+  />
+  <text class="boundary-label" x={project.canvas.w / 2} y={-8 * px} font-size={12 * px} text-anchor="middle">
+    {boundaryLabel}
+  </text>
   {#each project.strips as strip (strip.id)}
     {#if !strip.hidden}
       <StripView
@@ -174,5 +267,16 @@
   }
   .canvas.panning {
     cursor: grab;
+  }
+  .boundary {
+    stroke: var(--muted);
+    stroke-width: 1;
+    stroke-dasharray: 6 4;
+    opacity: 0.6;
+  }
+  .boundary-label {
+    fill: var(--muted);
+    font-family: system-ui, sans-serif;
+    user-select: none;
   }
 </style>

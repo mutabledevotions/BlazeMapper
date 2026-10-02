@@ -4,9 +4,11 @@
 // and one entry here -- no other code changes.
 
 import * as line from './line.js'
+import * as points from './points.js'
 
 const REGISTRY = {
-  line
+  line,
+  points
 }
 
 function impl(geom) {
