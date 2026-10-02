@@ -172,9 +172,9 @@
       <Help text="Default on. Locked: positions scale, strip size/pitch/LED count stay fixed. Unlocked: full geometric scale, pitch scales too." />
     </label>
   </div>
-  </div>
 
   <span class="hint-line">{hintText}</span>
+  </div>
 </div>
 
 <AddStripsDialog bind:this={stripsDialog} />
@@ -245,12 +245,17 @@
     font-size: 0.78rem;
     padding-bottom: 0.35rem;
   }
+  /* Second toolbar row: World + Transform side by side, hint line filling the
+     rest. Groups are nowrap; the row only wraps when narrower than both. */
   .tb-cluster {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 0.5rem 1rem;
-    min-width: 0;
+    flex-basis: 100%;
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
   }
   .tb-group {
     display: flex;
@@ -308,12 +313,12 @@
     color: #0b0d10;
   }
   .hint-line {
-    /* Fixed footprint (not just margin-left: auto) so the line's box never
-       collapses or grows as hintText changes (including to '' while typing) --
-       that would otherwise shift every other toolbar item that wraps near it. */
+    /* Fills the space left in row two and ellipsizes, so changing hint text
+       never resizes or moves the World/Transform groups. */
     margin-left: auto;
-    width: 26rem;
-    flex-shrink: 0;
+    flex: 1 1 0;
+    min-width: 0;
+    align-self: center;
     color: var(--muted);
     font-size: 0.78rem;
     text-align: right;
