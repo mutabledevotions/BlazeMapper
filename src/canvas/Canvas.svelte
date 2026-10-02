@@ -20,11 +20,22 @@
   // World units per screen pixel. Labels, handles, markers multiply by this
   // so they keep a constant on-screen size at any zoom or unit.
   let clientSize = $state({ w: 1, h: 1 })
-  const px = $derived(Math.max(viewBox.w / clientSize.w, viewBox.h / clientSize.h))
+  const px = $derived(viewBox.w / clientSize.w)
 
   $effect(() => {
+    // Keep viewBox aspect equal to the element's, so the visible area is exactly
+    // the viewBox (grid and background then always fill the panel). First size -> fit.
+    let first = true
     const ro = new ResizeObserver(() => {
       clientSize = { w: svgEl.clientWidth || 1, h: svgEl.clientHeight || 1 }
+      if (first) {
+        first = false
+        fitView()
+        return
+      }
+      const h = viewBox.w * (clientSize.h / clientSize.w)
+      const cy = viewBox.y + viewBox.h / 2
+      viewBox = { ...viewBox, y: cy - h / 2, h }
     })
     ro.observe(svgEl)
     return () => ro.disconnect()
@@ -116,12 +127,13 @@
     const u = unionBox()
     const unionW = u.maxX - u.minX || project.grid.size * 10
     const unionH = u.maxY - u.minY || project.grid.size * 10
-    const maxW = unionW * 1.5
-    const maxH = unionH * 1.5
-    const minExtent = Math.max(minPitch() * 5, 1e-6)
+    const aspect = clientSize.w / clientSize.h || 1
+    // One scale for both axes so the aspect never drifts. Max: union fits 1.5x.
+    const maxW = Math.max(unionW, unionH * aspect) * 1.5
+    const minW = Math.max(minPitch() * 5, 1e-6)
 
-    const newW = Math.min(maxW, Math.max(minExtent, viewBox.w * factor))
-    const newH = Math.min(maxH, Math.max(minExtent, viewBox.h * factor))
+    const newW = Math.min(maxW, Math.max(minW, viewBox.w * factor))
+    const newH = newW / aspect
     viewBox = { ...viewBox, w: newW, h: newH }
     const after = screenToWorld(evt)
     let x = viewBox.x + (before.x - after.x)
@@ -263,6 +275,7 @@
     display: block;
     background: var(--canvas-bg, #1b1e24);
     touch-action: none;
+    overflow: hidden;
     cursor: default;
   }
   .canvas.panning {

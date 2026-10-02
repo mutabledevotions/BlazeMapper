@@ -80,7 +80,7 @@
           <input
             type="number"
             min="0.1"
-            step="0.01"
+            step="any"
             value={strip.pitch}
             onchange={(e) => set('pitch', parseFloat(e.target.value) || 0.1)}
           />

@@ -10,7 +10,7 @@
     return {
       count: 1,
       ledCount: 30,
-      pitch: +convert(16.667, 'mm', project.units).toFixed(3),
+      pitch: +convert(1000 / 60, 'mm', project.units).toFixed(3),
       colorType: 'RGB',
       z: 0,
       startChannel: 0,
@@ -22,10 +22,35 @@
     }
   }
 
+  // Last submitted values, remembered across opens and reloads. Lengths are
+  // stored with the unit they were entered in and converted if units changed.
+  const STORE_KEY = 'pm.addStrips.last'
+  const LENGTH_FIELDS = ['pitch', 'rowSpacing', 'offset', 'z']
+
+  function loadLast() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORE_KEY))
+      if (!saved || !saved.form) return null
+      const f = { ...defaults(), ...saved.form }
+      if (saved.units && saved.units !== project.units) {
+        for (const k of LENGTH_FIELDS) f[k] = +convert(f[k], saved.units, project.units).toFixed(3)
+      }
+      return f
+    } catch {
+      return null
+    }
+  }
+
+  function saveLast(f) {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ units: project.units, form: f }))
+    } catch {}
+  }
+
   let form = $state(defaults())
 
   export function open() {
-    form = defaults()
+    form = loadLast() || defaults()
     dialogEl.showModal()
   }
 
@@ -37,6 +62,7 @@
   function submit(evt) {
     evt.preventDefault()
     addStrips({ ...form })
+    saveLast({ ...form })
     dialogEl.close()
   }
 </script>
@@ -64,7 +90,7 @@
       </label>
       <label>
         Pitch ({project.units})
-        <input type="number" min="0.01" step="0.01" bind:value={form.pitch} />
+        <input type="number" min="0.01" step="any" bind:value={form.pitch} />
       </label>
       <label title="RGBW strips cap their Output Expander channel at 180 pixels instead of 240.">
         Color type
@@ -99,12 +125,12 @@
       {#if form.placement === 'stacked'}
         <label>
           Offset per strip ({project.units})
-          <input type="number" min="0" step="0.1" bind:value={form.offset} />
+          <input type="number" min="0" step="any" bind:value={form.offset} />
         </label>
       {:else}
         <label>
           Row spacing ({project.units})
-          <input type="number" min="0" step="0.1" bind:value={form.rowSpacing} />
+          <input type="number" min="0" step="any" bind:value={form.rowSpacing} />
         </label>
         <label class="chk" title="Reverses wire direction on every other row.">
           <input type="checkbox" bind:checked={form.serpentine} />

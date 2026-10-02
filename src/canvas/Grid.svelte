@@ -15,7 +15,7 @@
   }
 
   const minor = $derived(lines(size, size))
-  const major = $derived(lines(size * 5, size * 5))
+  const major = $derived(lines(size * 5, size))
 </script>
 
 <g class="grid">
