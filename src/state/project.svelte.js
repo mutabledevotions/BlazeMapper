@@ -15,8 +15,13 @@ import {
 import { stripsBbox } from '../core/layout.js'
 import { convert } from '../core/units.js'
 import { fitToBox, calibrateScale, convertImageUnits } from '../core/image.js'
+import { lastAddress, setStart, ensureAddresses, endAddress } from '../core/address.js'
 
 export const project = $state(newProject())
+// Defensive migration -- a no-op today (newProject starts with no strips), but
+// covers project load/creation once phase 4 adds persistence/import: anything
+// missing a `start` gets packed after its channel's current last address.
+project.strips = ensureAddresses(project.strips)
 
 // Reference image source data (data URL + natural size + file name) lives
 // outside the project on purpose: it's the one thing that would make undo
@@ -96,8 +101,21 @@ export function setLockPitch(v) {
   toolState.lockPitch = v
 }
 
+// Replaces project.strips with the result of an address.js operation (setStart /
+// ensureAddresses), which returns a new array rather than mutating in place.
+function applyAddressResult(nextStrips) {
+  project.strips = nextStrips
+}
+
+// Highest address already claimed in a channel -- new items/duplicates are
+// appended right after it, per the phase 3b migration rule.
+function channelLastAddress(channel, excludeId) {
+  return lastAddress(project.strips.filter((s) => s.channel === channel && s.id !== excludeId))
+}
+
 export function addStrip(geomType = 'line', opts = {}) {
   const strip = newStrip(geomType, opts)
+  if (strip.start === undefined) strip.start = channelLastAddress(strip.channel) + 1
   project.strips.push(strip)
   selectStrip(strip.id)
   return strip
@@ -115,6 +133,7 @@ export function addStrips(opts) {
   const cy = view.y
   const rowSpacing = opts.rowSpacing > 0 ? opts.rowSpacing : pitch * 3
   const offset = opts.offset > 0 ? opts.offset : pitch
+  const channelCursor = new Map() // channel -> last address claimed so far (seeded lazily below)
 
   for (let i = 0; i < count; i++) {
     let p0
@@ -138,6 +157,9 @@ export function addStrips(opts) {
       reversed,
       geom: { p0, angle: 0 }
     })
+    if (!channelCursor.has(channel)) channelCursor.set(channel, channelLastAddress(channel))
+    strip.start = channelCursor.get(channel) + 1
+    channelCursor.set(channel, strip.start + ledCount - 1)
     project.strips.push(strip)
     created.push(strip)
   }
@@ -154,6 +176,7 @@ export function addPixels(count, spacing, channel = 0) {
   const step = spacing > 0 ? spacing : gridStep(project)
   const startX = view.x - ((n - 1) * step) / 2
   let num = project.strips.filter((s) => s.kind === 'pixel').length
+  let cursor = channelLastAddress(channel)
   const added = []
   for (let i = 0; i < n; i++) {
     num += 1
@@ -164,6 +187,8 @@ export function addPixels(count, spacing, channel = 0) {
       pitch: step,
       geom: { pts: [{ x: startX + i * step, y: view.y }] }
     })
+    cursor += 1 // each pixel is a single LED
+    px.start = cursor
     project.strips.push(px)
     added.push(px.id)
   }
@@ -171,10 +196,48 @@ export function addPixels(count, spacing, channel = 0) {
   return added
 }
 
+// channel and ledCount both affect addressing, so they need the push rule
+// re-run after the plain field assignment below: a channel change moves the
+// item to the end of its new channel, and a ledCount change can make the
+// item's (unchanged) start now overlap a later item in the same channel.
 export function updateStrip(id, patch) {
   const strip = project.strips.find((s) => s.id === id)
   if (!strip) return
+  const hasChannel = Object.prototype.hasOwnProperty.call(patch, 'channel') && patch.channel !== strip.channel
+  const hasLedCount = Object.prototype.hasOwnProperty.call(patch, 'ledCount') && patch.ledCount !== strip.ledCount
   Object.assign(strip, patch)
+  if (hasChannel) {
+    const newStart = channelLastAddress(strip.channel, id) + 1
+    applyAddressResult(setStart(project.strips, id, newStart))
+  } else if (hasLedCount) {
+    applyAddressResult(setStart(project.strips, id, strip.start))
+  }
+}
+
+// Strip properties' Address field and nudge buttons: explicit insert-and-push
+// edit of an item's start address (core/address.js's setStart). No-op for a
+// locked item (immovable) or a missing strip.
+export function setStripStart(id, start) {
+  const strip = project.strips.find((s) => s.id === id)
+  if (!strip || strip.locked) return
+  applyAddressResult(setStart(project.strips, id, start))
+}
+
+// Strip list drag-reorder: the dropped position's new start is "right after
+// the end of whatever now precedes it" (or address 1 if dropped first in the
+// channel) -- then the ordinary push rule resolves any overlap. `afterId`
+// is the id of the item that should immediately precede the dropped item in
+// the target channel, or null/undefined to drop it at the channel's start.
+export function moveStripToAddress(id, channel, afterId) {
+  const strip = project.strips.find((s) => s.id === id)
+  if (!strip || strip.locked) return
+  strip.channel = channel
+  let newStart = 1
+  if (afterId) {
+    const after = project.strips.find((s) => s.id === afterId && s.channel === channel)
+    if (after) newStart = endAddress(after) + 1
+  }
+  applyAddressResult(setStart(project.strips, id, newStart))
 }
 
 // Switches a line strip's spacing mode. Entering 'fit' seeds p1 at the strip's
@@ -262,7 +325,12 @@ export function removeSelected() {
 export function moveHandle(id, handleId, pt, opts = {}) {
   const strip = project.strips.find((s) => s.id === id)
   if (!strip || strip.locked) return
-  Object.assign(strip, geomMoveHandle(strip.geom, handleId, pt, opts, strip))
+  const patch = geomMoveHandle(strip.geom, handleId, pt, opts, strip)
+  const ledCountChanged = patch.ledCount !== undefined && patch.ledCount !== strip.ledCount
+  Object.assign(strip, patch)
+  // Ctrl/Cmd-drag on the end handle also resizes ledCount (see geometry/line.js) --
+  // a bigger footprint can now overlap a later item in the same channel.
+  if (ledCountChanged) applyAddressResult(setStart(project.strips, id, strip.start))
 }
 
 export function translateStrip(id, dx, dy) {
@@ -314,6 +382,9 @@ export function duplicateSelected() {
     copy.id = newId('strip')
     copy.name = `${s.name} copy`
     copy.geom = geomTranslate(copy.geom, step, step)
+    // A copied start would collide with the original -- append after the
+    // channel's current last address instead (includes the original itself).
+    copy.start = channelLastAddress(copy.channel) + 1
     project.strips.splice(i + 1, 0, copy)
     newIds.push(copy.id)
   }
@@ -365,18 +436,6 @@ export function scaleSelected(k, anchor, lockPitch) {
 // same delta (translateStrip already skips locked strips).
 export function nudgeSelected(dx, dy) {
   translateStrips(selection.ids, dx, dy)
-}
-
-// Reorders project.strips (the array order used for export). targetIndex is an
-// index into the array *after* removal of `id`. Passing `channel` also moves the
-// strip into that channel (drag across channel groups in the strip list).
-export function reorderStrip(id, targetIndex, channel) {
-  const i = project.strips.findIndex((s) => s.id === id)
-  if (i === -1) return
-  const [strip] = project.strips.splice(i, 1)
-  if (channel !== undefined) strip.channel = channel
-  const clamped = Math.max(0, Math.min(targetIndex, project.strips.length))
-  project.strips.splice(clamped, 0, strip)
 }
 
 // Converts every length in the project so the physical layout is unchanged.

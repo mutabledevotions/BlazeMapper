@@ -7,13 +7,15 @@
     updateStrip,
     setSpacing,
     nudgeSelected,
-    rotateSelectedBy
+    rotateSelectedBy,
+    setStripStart
   } from '../state/project.svelte.js'
   import { PITCH_PRESETS, convert } from '../core/units.js'
   import { quantizeAngle } from '../core/geometry/line.js'
   import { sample } from '../core/geometry/index.js'
   import { stripsBbox } from '../core/layout.js'
   import { gridStep } from '../core/model.js'
+  import { endAddress, byteRange } from '../core/address.js'
   import Help from './Help.svelte'
 
   const strip = $derived(project.strips.find((s) => s.id === selection.primary))
@@ -85,6 +87,25 @@
     const step = evt.shiftKey ? 15 : 0.5
     rotateSelectedBy(dir * step)
   }
+
+  // Address readout: "LEDs 12-21" (LED-level, the primary address Pixelblaze
+  // and the Output Expander both actually use) plus a secondary "bytes 34-63"
+  // readout for anyone thinking in DMX-style byte channels.
+  const addrEnd = $derived(strip ? endAddress(strip) : 0)
+  const addrLedRange = $derived(strip ? (strip.start === addrEnd ? `${strip.start}` : `${strip.start}-${addrEnd}`) : '')
+  const addrBytes = $derived(strip ? byteRange(strip) : null)
+
+  function setAddress(v) {
+    if (!strip) return
+    const n = Math.max(1, Math.round(v) || 1)
+    setStripStart(strip.id, n)
+  }
+
+  function nudgeAddress(dir, evt) {
+    if (!strip) return
+    const mult = evt.shiftKey ? 10 : 1
+    setStripStart(strip.id, Math.max(1, strip.start + dir * mult))
+  }
 </script>
 
 <div class="strip-props">
@@ -99,6 +120,31 @@
         Name
         <input type="text" value={strip.name} onchange={(e) => set('name', e.target.value)} />
       </label>
+
+      <div class="readout">
+        <div class="readout-row">
+          <label class="num">
+            <span class="label-row">
+              Address
+              <Help text="This item's 1-based LED address within its Output Expander channel. Pixelblaze and the Output Expander address whole LEDs, not color bytes -- setting this claims [start, end] and pushes any other item in the channel that now overlaps to right after whatever displaced it, cascading forward. Untouched gaps are left alone, and a locked item is never pushed (the push jumps past it instead)." />
+            </span>
+            <input
+              type="number"
+              min="1"
+              disabled={strip.locked}
+              value={strip.start}
+              onchange={(e) => setAddress(parseFloat(e.target.value))}
+            />
+          </label>
+        </div>
+        <div class="nudge-row">
+          <button type="button" class="nudge" title="Address -1 (Shift: -10)" disabled={strip.locked} onclick={(e) => nudgeAddress(-1, e)}>&minus;</button>
+          <button type="button" class="nudge" title="Address +1 (Shift: +10)" disabled={strip.locked} onclick={(e) => nudgeAddress(1, e)}>&plus;</button>
+        </div>
+        <p class="addr-readout">
+          LEDs {addrLedRange}{#if addrBytes} &middot; bytes {addrBytes.start}-{addrBytes.end}{/if}
+        </p>
+      </div>
     {/if}
 
     {#if originRel}
@@ -233,8 +279,8 @@
 
       <label>
         <span class="label-row">
-          Z
-          <Help text="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z." />
+          Z ({project.units})
+          <Help text="Depth in world units (same units as X/Y, currently shown in the label), not normalized map units. On export Z is divided by the world box size like X and Y. The map switches to [x, y, z] when any item has a non-zero Z (or Force Z is on)." />
         </span>
         <input type="number" step="1" value={fmt(strip.z)} onchange={(e) => set('z', parseFloat(e.target.value) || 0)} />
       </label>
@@ -318,5 +364,14 @@
   .nudge:hover {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  .nudge:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .addr-readout {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.75rem;
   }
 </style>

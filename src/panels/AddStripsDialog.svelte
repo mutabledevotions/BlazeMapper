@@ -118,8 +118,8 @@
       </label>
       <label>
         <span class="label-row">
-          Z
-          <Help text="Depth coordinate. Export switches to [x,y,z] when any strip has a non-zero Z." />
+          Z ({project.units})
+          <Help text="Depth in world units (same units as X/Y, currently shown in the label), not normalized map units. On export Z is divided by the world box size like X and Y. The map switches to [x, y, z] when any item has a non-zero Z (or Force Z is on)." />
         </span>
         <input type="number" step="1" bind:value={form.z} />
       </label>

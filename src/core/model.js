@@ -17,7 +17,7 @@ export function newProject() {
     world: { x: 0, y: 0, size: 2000 },
     image: null, // { x, y, scale, rotation, opacity, locked, visible } once loaded; src lives outside the project (see state/project.svelte.js's imageSrc)
     strips: [],
-    export: { decimals: 4, forceZ: false, anchors: false }
+    export: { decimals: 4, forceZ: false, anchors: false, gapPlaceholder: 'previous' }
   }
 }
 

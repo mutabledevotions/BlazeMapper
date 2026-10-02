@@ -3,6 +3,7 @@
 // warning shape: { level: 'warning' | 'error', message, stripId?, channel? }
 
 import { sample } from './geometry/index.js'
+import { ensureAddresses, lastAddress } from './address.js'
 
 const CHANNEL_LIMITS = { RGB: 240, RGBW: 180 }
 
@@ -22,21 +23,27 @@ export function validateProject(project) {
     byChannel.get(strip.channel).push(strip)
   }
 
+  // Addressed copies, just for the last-address-incl-gaps limit check below --
+  // the channel's byte budget is really spent by the last claimed address, not
+  // the sum of each strip's own LED count (an unaddressed gap is still a real
+  // LED on the wire and still costs a map entry).
+  const addressedByChannel = new Map()
+  for (const strip of ensureAddresses(project.strips).filter((s) => !s.hidden)) {
+    if (!addressedByChannel.has(strip.channel)) addressedByChannel.set(strip.channel, [])
+    addressedByChannel.get(strip.channel).push(strip)
+  }
+
   for (const [channel, strips] of byChannel) {
-    let count = 0
-    const colorTypes = new Set()
-    for (const strip of strips) {
-      count += sample(strip.geom, strip).length
-      colorTypes.add(strip.colorType)
-    }
+    const colorTypes = new Set(strips.map((s) => s.colorType))
     // The channel's strictest type governs its limit: any RGBW strip caps the
     // whole channel at 180, even if the rest are RGB.
     const strictest = colorTypes.has('RGBW') ? 'RGBW' : 'RGB'
     const limit = CHANNEL_LIMITS[strictest]
+    const count = lastAddress(addressedByChannel.get(channel) || [])
     if (count > limit) {
       warnings.push({
         level: 'error',
-        message: `Channel ${channel}: ${count} pixels exceeds the ${limit}-pixel ${strictest} limit per Output Expander channel`,
+        message: `Channel ${channel}: last address ${count} (incl. gaps) exceeds the ${limit}-pixel ${strictest} limit per Output Expander channel`,
         channel
       })
     }

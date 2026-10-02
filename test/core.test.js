@@ -5,6 +5,7 @@ import { computePixels, projectBbox } from '../src/core/layout.js'
 import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
 import { fitToBox, calibrateScale, imageCorners, imageBbox, convertImageUnits } from '../src/core/image.js'
+import { ledCount, endAddress, lastAddress, packChannel, setStart, ensureAddresses } from '../src/core/address.js'
 import {
   project,
   selection,
@@ -93,6 +94,44 @@ describe('layout computePixels', () => {
     const pixels = computePixels(project)
     expect(pixels.map((p) => p.x)).toEqual([20, 10, 0])
   })
+
+  it('emits gap placeholders for unclaimed addresses, repeating the previous LED by default', () => {
+    const project = newProject()
+    const a = newStrip('line', { ledCount: 2, pitch: 10, channel: 0, geom: { p0: { x: 0, y: 0 }, angle: 0 } })
+    a.start = 1
+    const b = newStrip('line', { ledCount: 2, pitch: 10, channel: 0, geom: { p0: { x: 100, y: 0 }, angle: 0 } })
+    b.start = 5 // leaves addresses 3-4 as a gap
+    project.strips.push(a, b)
+    const pixels = computePixels(project)
+    expect(pixels.map((p) => p.gap)).toEqual([false, false, true, true, false, false])
+    // Gap pixels (global 2,3) repeat the previous real LED -- a's last point (10,0).
+    expect(pixels[2]).toMatchObject({ x: 10, y: 0, gap: true })
+    expect(pixels[3]).toMatchObject({ x: 10, y: 0, gap: true })
+    expect(pixels.length).toBe(6)
+  })
+
+  it('a channel that starts with a gap uses the first real LED\'s coordinate', () => {
+    const project = newProject()
+    const a = newStrip('line', { ledCount: 2, pitch: 10, channel: 0, geom: { p0: { x: 50, y: 0 }, angle: 0 } })
+    a.start = 3 // addresses 1-2 are a leading gap
+    project.strips.push(a)
+    const pixels = computePixels(project)
+    expect(pixels.map((p) => p.gap)).toEqual([true, true, false, false])
+    expect(pixels[0]).toMatchObject({ x: 50, y: 0, gap: true })
+  })
+
+  it('gapPlaceholder "origin" puts gaps at the world origin instead', () => {
+    const project = newProject()
+    project.world = { x: 7, y: 9, size: 100 }
+    project.export.gapPlaceholder = 'origin'
+    const a = newStrip('line', { ledCount: 1, pitch: 10, channel: 0, geom: { p0: { x: 0, y: 0 }, angle: 0 } })
+    a.start = 3
+    project.strips.push(a)
+    const pixels = computePixels(project)
+    expect(pixels[0]).toMatchObject({ x: 7, y: 9, gap: true })
+    expect(pixels[1]).toMatchObject({ x: 7, y: 9, gap: true })
+    expect(pixels[2]).toMatchObject({ x: 0, y: 0, gap: false })
+  })
 })
 
 describe('export', () => {
@@ -138,7 +177,7 @@ describe('export', () => {
     const json = toMapJSON(pixels, { world, decimals: 2, anchors: true })
     expect(json).toBe('[[0.1,0.1],[0,0],[1,1]]')
     expect(pixels.length).toBe(1)
-    expect(channelSummary(pixels)).toEqual([{ channel: 0, colorType: 'RGB', start: 0, count: 1 }])
+    expect(channelSummary(pixels)).toEqual([{ channel: 0, colorType: 'RGB', start: 0, count: 1, gaps: 0, used: 1 }])
   })
 
   it('summarizes contiguous channel runs', () => {
@@ -148,9 +187,18 @@ describe('export', () => {
       { channel: 1, colorType: 'RGBW', global: 2 }
     ]
     expect(channelSummary(pixels)).toEqual([
-      { channel: 0, colorType: 'RGB', start: 0, count: 2 },
-      { channel: 1, colorType: 'RGBW', start: 2, count: 1 }
+      { channel: 0, colorType: 'RGB', start: 0, count: 2, gaps: 0, used: 2 },
+      { channel: 1, colorType: 'RGBW', start: 2, count: 1, gaps: 0, used: 1 }
     ])
+  })
+
+  it('counts gap placeholders toward the channel total, separately from used', () => {
+    const pixels = [
+      { channel: 0, colorType: 'RGB', global: 0, gap: false },
+      { channel: 0, colorType: 'RGB', global: 1, gap: true },
+      { channel: 0, colorType: 'RGB', global: 2, gap: false }
+    ]
+    expect(channelSummary(pixels)).toEqual([{ channel: 0, colorType: 'RGB', start: 0, count: 3, gaps: 1, used: 2 }])
   })
 })
 
@@ -504,5 +552,153 @@ describe('store: duplicateSelected', () => {
     expect(newIds.length).toBe(1)
     expect(project.strips.length).toBe(3)
     expect(project.strips.some((s) => s.name === 'B copy')).toBe(false)
+  })
+})
+function strip(id, channel, start, ledCount) {
+  return { id, channel, start, ledCount, locked: false, colorType: 'RGB' }
+}
+
+describe('core/address: ledCount / endAddress', () => {
+  it('ledCount reads the points list length for points geometry', () => {
+    const item = { ledCount: 99, geom: { type: 'points', pts: [{ x: 0, y: 0 }, { x: 1, y: 1 }] } }
+    expect(ledCount(item)).toBe(2)
+  })
+
+  it('ledCount reads strip.ledCount for non-points geometry', () => {
+    const item = { ledCount: 7, geom: { type: 'line' } }
+    expect(ledCount(item)).toBe(7)
+  })
+
+  it('endAddress is start + ledCount - 1', () => {
+    expect(endAddress(strip('a', 0, 5, 10))).toBe(14)
+  })
+
+  it('lastAddress finds the max end across a channel, 0 when empty', () => {
+    expect(lastAddress([strip('a', 0, 1, 10), strip('b', 0, 20, 5)])).toBe(24)
+    expect(lastAddress([])).toBe(0)
+  })
+})
+
+describe('core/address: packChannel', () => {
+  it('assigns sequential starts from 1, no gaps', () => {
+    const items = [strip('a', 0, undefined, 3), strip('b', 0, undefined, 5)]
+    const packed = packChannel(items)
+    expect(packed.map((i) => [i.id, i.start])).toEqual([
+      ['a', 1],
+      ['b', 4]
+    ])
+  })
+})
+
+describe('core/address: setStart -- plan examples', () => {
+  // Strips 1-10 / 12-21 / 30-39 (ledCount 10 each, gap at 11 and 22-29).
+  function baseItems() {
+    return [strip('s1', 0, 1, 10), strip('s2', 0, 12, 10), strip('s3', 0, 30, 10)]
+  }
+
+  it('move strip 3 to 11 -> 3 at 11-20, 2 pushed to 21-30, 1 untouched', () => {
+    const next = setStart(baseItems(), 's3', 11)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.s1.start).toBe(1)
+    expect(byId.s3.start).toBe(11)
+    expect(endAddress(byId.s3)).toBe(20)
+    expect(byId.s2.start).toBe(21)
+    expect(endAddress(byId.s2)).toBe(30)
+  })
+
+  it('move strip 2 to 1 -> 2 at 1-10, 1 pushed to 11-20, 3 untouched', () => {
+    const next = setStart(baseItems(), 's2', 1)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.s2.start).toBe(1)
+    expect(endAddress(byId.s2)).toBe(10)
+    expect(byId.s1.start).toBe(11)
+    expect(endAddress(byId.s1)).toBe(20)
+    expect(byId.s3.start).toBe(30)
+  })
+
+  it.each([31, 29, 23])('nudging strip 3 to %i just moves it (no overlap, no push)', (S) => {
+    const next = setStart(baseItems(), 's3', S)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.s3.start).toBe(S)
+    expect(byId.s1.start).toBe(1)
+    expect(byId.s2.start).toBe(12)
+  })
+})
+
+describe('core/address: setStart -- cascade and growth', () => {
+  it('cascades through more than one overlapping peer', () => {
+    // a:1-5, b:6-10, c:11-15, d:20-24. Moving d to 1 should push a,b,c forward in turn.
+    const items = [strip('a', 0, 1, 5), strip('b', 0, 6, 5), strip('c', 0, 11, 5), strip('d', 0, 20, 5)]
+    const next = setStart(items, 'd', 1)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.d.start).toBe(1)
+    expect(byId.a.start).toBe(6)
+    expect(byId.b.start).toBe(11)
+    expect(byId.c.start).toBe(16)
+  })
+
+  it('growing an item\'s ledCount re-pushes a now-overlapping later item', () => {
+    // a:1-10, b:11-20. Growing a to 15 LEDs (end 15) overlaps b -> b pushes to 16.
+    let items = [strip('a', 0, 1, 10), strip('b', 0, 11, 10)]
+    items = items.map((i) => (i.id === 'a' ? { ...i, ledCount: 15 } : i))
+    const next = setStart(items, 'a', 1) // re-run push after the ledCount change
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.a.start).toBe(1)
+    expect(endAddress(byId.a)).toBe(15)
+    expect(byId.b.start).toBe(16)
+  })
+
+  it('shrinking ledCount never pushes -- a smaller claim just opens a gap', () => {
+    let items = [strip('a', 0, 1, 10), strip('b', 0, 11, 10)]
+    items = items.map((i) => (i.id === 'a' ? { ...i, ledCount: 3 } : i))
+    const next = setStart(items, 'a', 1)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.a.start).toBe(1)
+    expect(byId.b.start).toBe(11)
+  })
+
+  it('locked peer is never moved; the push jumps past its end', () => {
+    // a:1-10, L(locked):11-20, b:21-30. Moving c to 5 overlaps a and (if pushed
+    // past) would land on L -- L must stay put, and a lands right after it.
+    const items = [strip('a', 0, 1, 10), { ...strip('L', 0, 11, 10), locked: true }, strip('b', 0, 21, 10), strip('c', 0, 50, 10)]
+    const next = setStart(items, 'c', 1)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.c.start).toBe(1)
+    expect(byId.L.start).toBe(11) // untouched
+    expect(byId.a.start).toBe(21) // pushed past L's end (20), not into it
+    expect(byId.b.start).toBe(31)
+  })
+
+  it('setStart on a locked item is a no-op', () => {
+    const items = [{ ...strip('a', 0, 1, 10), locked: true }, strip('b', 0, 11, 10)]
+    const next = setStart(items, 'a', 50)
+    expect(next).toBe(items)
+  })
+
+  it('a locked item\'s own unchanged start still re-runs the cascade for its neighbors', () => {
+    // Growing a locked strip's ledCount keeps it in place but should still push
+    // a now-overlapping neighbor forward.
+    let items = [{ ...strip('a', 0, 1, 10), locked: true }, strip('b', 0, 11, 10)]
+    items = items.map((i) => (i.id === 'a' ? { ...i, ledCount: 15 } : i))
+    const next = setStart(items, 'a', 1) // same start as before -- not a move
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.a.start).toBe(1)
+    expect(byId.b.start).toBe(16)
+  })
+})
+
+describe('core/address: ensureAddresses migration', () => {
+  it('packs items missing start after the channel\'s current last address', () => {
+    const items = [strip('a', 0, 1, 10), { id: 'b', channel: 0, ledCount: 5 }, { id: 'c', channel: 1, ledCount: 2 }]
+    const next = ensureAddresses(items)
+    const byId = Object.fromEntries(next.map((i) => [i.id, i]))
+    expect(byId.a.start).toBe(1)
+    expect(byId.b.start).toBe(11)
+    expect(byId.c.start).toBe(1)
+  })
+
+  it('is a no-op (same reference) when every item already has a start', () => {
+    const items = [strip('a', 0, 1, 10)]
+    expect(ensureAddresses(items)).toBe(items)
   })
 })

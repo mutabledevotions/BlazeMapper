@@ -1,22 +1,42 @@
 <script>
   // Strips grouped by channel (channel header rows), like Illustrator layers.
-  // Drag-and-drop reorders within a channel group or moves a strip into another
-  // group (which sets strip.channel). Order within a channel = array order in
-  // project.strips; reorderStrip() does the actual array surgery.
-  import { project, selection, selectStrip, selectStrips, toggleSelect, removeStrip, updateStrip, reorderStrip } from '../state/project.svelte.js'
+  // List order within a channel = ascending address (core/address.js's `start`),
+  // not raw array order -- project.strips itself is kept in sync with this
+  // (see address.js's reorderChannelSlots) so existing array-order-based code
+  // keeps working, but this panel displays and drags by address directly.
+  // Drag-and-drop computes the drop point's address (previous item's end + 1,
+  // or 1 at the channel's start) and hands it to moveStripToAddress, which
+  // applies the insert-and-push rule (core/address.js's setStart).
+  import { project, selection, selectStrip, selectStrips, toggleSelect, removeStrip, updateStrip, moveStripToAddress } from '../state/project.svelte.js'
+  import { endAddress } from '../core/address.js'
 
-  // Channels in ascending order, each with its strips in current array order.
+  // Channels in ascending order, each with its strips sorted by address.
   const groups = $derived.by(() => {
     const map = new Map()
     for (const strip of project.strips) {
       if (!map.has(strip.channel)) map.set(strip.channel, [])
       map.get(strip.channel).push(strip)
     }
+    for (const strips of map.values()) strips.sort((a, b) => (a.start || 0) - (b.start || 0))
     return [...map.entries()].sort((a, b) => a[0] - b[0])
   })
 
   // Flat displayed order (channel-grouped), used by Shift-click range select.
   const displayOrder = $derived(groups.flatMap(([, strips]) => strips.map((s) => s.id)))
+
+  // Interleaves gap separator rows between items whose addresses aren't
+  // contiguous (and before the first item, if its address isn't 1).
+  function withGaps(strips) {
+    const rows = []
+    let cursor = 1
+    for (const s of strips) {
+      const start = s.start || cursor
+      if (start > cursor) rows.push({ kind: 'gap', from: cursor, to: start - 1 })
+      rows.push({ kind: 'item', strip: s })
+      cursor = endAddress(s) + 1
+    }
+    return rows
+  }
 
   // Range-select anchor: the last row clicked plainly or Ctrl/Cmd-toggled.
   let anchorId = $state(null)
@@ -38,44 +58,38 @@
     evt.dataTransfer.dropEffect = 'move'
   }
 
+  // Every item in `channel` except `excludeId`, sorted by address.
+  function channelSortedExcluding(channel, excludeId) {
+    return project.strips.filter((s) => s.channel === channel && s.id !== excludeId).sort((a, b) => (a.start || 0) - (b.start || 0))
+  }
+
   function onRowDrop(evt, targetStrip, after) {
     evt.preventDefault()
     const id = evt.dataTransfer.getData('text/plain') || dragId
     if (!id || id === targetStrip.id) return
-    const fromIndex = project.strips.findIndex((s) => s.id === id)
-    const targetIndex = project.strips.findIndex((s) => s.id === targetStrip.id)
-    let insertAt = after ? targetIndex + 1 : targetIndex
-    if (fromIndex !== -1 && fromIndex < insertAt) insertAt -= 1
-    reorderStrip(id, insertAt, targetStrip.channel)
-  }
-
-  function channelEndIndex(channel) {
-    let idx = project.strips.length
-    for (let i = project.strips.length - 1; i >= 0; i--) {
-      if (project.strips[i].channel === channel) {
-        idx = i + 1
-        break
-      }
-    }
-    return idx
+    const items = channelSortedExcluding(targetStrip.channel, id)
+    const idx = items.findIndex((s) => s.id === targetStrip.id)
+    const afterId = after ? targetStrip.id : idx > 0 ? items[idx - 1].id : null
+    moveStripToAddress(id, targetStrip.channel, afterId)
   }
 
   function onGroupDrop(evt, channel) {
     evt.preventDefault()
     const id = evt.dataTransfer.getData('text/plain') || dragId
     if (!id) return
-    const fromIndex = project.strips.findIndex((s) => s.id === id)
-    let insertAt = channelEndIndex(channel)
-    if (fromIndex !== -1 && fromIndex < insertAt) insertAt -= 1
-    reorderStrip(id, insertAt, channel)
+    const items = channelSortedExcluding(channel, id)
+    const afterId = items.length ? items[items.length - 1].id : null
+    moveStripToAddress(id, channel, afterId)
   }
 
   function toggle(strip, field) {
     updateStrip(strip.id, { [field]: !strip[field] })
   }
 
-  function ledLabel(strip) {
-    return strip.geom.type === 'points' ? strip.geom.pts.length : strip.ledCount
+  // "12-21" address range, or just "12" for a single-LED item (a pixel).
+  function addressLabel(strip) {
+    const end = endAddress(strip)
+    return strip.start === end ? `${strip.start}` : `${strip.start}-${end}`
   }
 
   // Plain click: select this row and set it as the range anchor.
@@ -111,7 +125,13 @@
     <div class="channel-group" role="list" ondragover={onRowDragOver} ondrop={(evt) => onGroupDrop(evt, channel)}>
       <div class="channel-header">Channel {channel}</div>
       <ul>
-        {#each strips as strip (strip.id)}
+        {#each withGaps(strips) as row (row.kind === 'item' ? row.strip.id : `gap-${row.from}`)}
+        {#if row.kind === 'gap'}
+          <li class="gap-row" aria-hidden="true">
+            <span class="gap-label">gap {row.from}{row.to > row.from ? `-${row.to}` : ''} ({row.to - row.from + 1})</span>
+          </li>
+        {:else}
+          {@const strip = row.strip}
           <li
             class:selected={selection.ids.includes(strip.id)}
             class:dragging={dragId === strip.id}
@@ -150,10 +170,11 @@
             <button class="row" onclick={(evt) => onRowClick(strip, evt)}>
               <span class="swatch" style:background={strip.color}></span>
               <span class="name">{strip.name}</span>
-              <span class="meta">{strip.kind === 'pixel' ? 'pixel' : `${ledLabel(strip)} LED`}</span>
+              <span class="meta">{addressLabel(strip)}</span>
             </button>
             <button class="del" title="Delete" onclick={() => removeStrip(strip.id)}>&times;</button>
           </li>
+        {/if}
         {/each}
       </ul>
     </div>
@@ -250,6 +271,17 @@
     color: var(--muted);
     font-size: 0.75rem;
     flex-shrink: 0;
+  }
+  .gap-row {
+    display: flex;
+    align-items: center;
+    padding: 0.1rem 0.4rem;
+  }
+  .gap-label {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: italic;
+    opacity: 0.6;
   }
   .del {
     background: none;

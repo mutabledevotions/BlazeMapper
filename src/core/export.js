@@ -52,16 +52,21 @@ export function toMapJSON(pixels, opts = {}) {
 }
 
 // Pixels arrive pre-sorted by channel (see layout.js), so each channel forms one
-// contiguous run -- walk it once rather than grouping into a map.
+// contiguous run -- walk it once rather than grouping into a map. `count` is the
+// total addresses in the channel including gap placeholders (what the 240/180
+// Output Expander limit is actually checked against -- gap LEDs are real LEDs on
+// the wire); `used` is just the real (non-gap) LEDs, `gaps` the rest.
 export function channelSummary(pixels) {
   const summary = []
   for (const p of pixels) {
     const last = summary[summary.length - 1]
     if (last && last.channel === p.channel) {
       last.count += 1
+      if (p.gap) last.gaps += 1
     } else {
-      summary.push({ channel: p.channel, colorType: p.colorType, start: p.global, count: 1 })
+      summary.push({ channel: p.channel, colorType: p.colorType, start: p.global, count: 1, gaps: p.gap ? 1 : 0 })
     }
   }
+  for (const row of summary) row.used = row.count - row.gaps
   return summary
 }

@@ -97,6 +97,16 @@
           Anchor world corners (experimental)
           <Help text="Experimental, untested on real hardware: appends the world box's own [0,0] and [1,1] corners to the map so Pixelblaze's Fill/Contain normalization can't shift or shrink the layout. Not counted in the pixel total or channel summary." />
         </label>
+        <label class="gap-opt">
+          <span class="label-row">
+            Gap placeholder
+            <Help text="Pixelblaze's map is dense (array index = LED index), so an unaddressed LED on the wire still needs a map entry. 'Previous LED' repeats the coordinate of the last real LED before the gap (the first real LED, if the channel starts with a gap). 'World origin' puts gap placeholders at the world box's origin instead. Either way, gap LEDs count toward the channel's total and the 240 RGB / 180 RGBW limit." />
+          </span>
+          <select value={project.export.gapPlaceholder} onchange={(e) => setExport({ gapPlaceholder: e.target.value })}>
+            <option value="previous">Previous LED</option>
+            <option value="origin">World origin</option>
+          </select>
+        </label>
       </div>
 
       <div class="side">
@@ -106,7 +116,9 @@
               <th>Ch</th>
               <th>Type</th>
               <th>Start</th>
-              <th>Count</th>
+              <th>Used</th>
+              <th>Gaps</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody>
@@ -115,6 +127,8 @@
                 <td>{row.channel}</td>
                 <td>{row.colorType}</td>
                 <td>{row.start}</td>
+                <td>{row.used}</td>
+                <td>{row.gaps}</td>
                 <td>{row.count}</td>
               </tr>
             {/each}
@@ -223,6 +237,13 @@
     color: var(--muted);
     font-size: 0.75rem;
     margin: 0;
+  }
+  .gap-opt {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.78rem;
+    color: var(--muted);
   }
   .main .chk {
     display: flex;
