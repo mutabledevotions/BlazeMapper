@@ -32,7 +32,8 @@
     resizeWorld,
     updateImage,
     addCalibrationPoint,
-    cancelCalibration
+    cancelCalibration,
+    closeOpenPopup
   } from '../state/project.svelte.js'
   import { projectBbox, stripsBbox } from '../core/layout.js'
   import { sample as geomSample } from '../core/geometry/index.js'
@@ -587,6 +588,12 @@
       // behaviour, since it's a modal-ish mode the user needs an easy way out of.
       if (calibration.active) {
         cancelCalibration()
+        return
+      }
+      // A floating popup (Grid/World/Reference image) takes the next priority,
+      // so Esc backs out one layer at a time instead of also clearing selection.
+      if (ui.openPopup) {
+        closeOpenPopup()
         return
       }
       clearSelection()

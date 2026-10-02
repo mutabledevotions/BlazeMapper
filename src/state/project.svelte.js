@@ -140,8 +140,10 @@ export function clearKeys() {
 }
 
 // Transient UI context other components need to read without prop-drilling:
-// dragMode drives the toolbar's hotkey hint line, typing hides it.
-export const ui = $state({ dragMode: null, typing: false })
+// dragMode drives the toolbar's hotkey hint line, typing hides it, openPopup
+// tracks which one of the Grid/World/Reference-image floating popups (if any)
+// is open -- only one at a time (see Toolbar.svelte).
+export const ui = $state({ dragMode: null, typing: false, openPopup: null })
 
 export function setDragMode(mode) {
   ui.dragMode = mode
@@ -149,6 +151,16 @@ export function setDragMode(mode) {
 
 export function setTyping(v) {
   ui.typing = v
+}
+
+// Opens `name` ('grid' | 'world' | 'image'), closing whichever popup (if any)
+// was open before; calling with the already-open name closes it instead.
+export function setOpenPopup(name) {
+  ui.openPopup = ui.openPopup === name ? null : name
+}
+
+export function closeOpenPopup() {
+  ui.openPopup = null
 }
 
 // Group-resize "Lock pitch" toggle (default on). Not part of the project model --

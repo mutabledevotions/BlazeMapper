@@ -1,19 +1,16 @@
 <script>
-  import { fmt } from '../core/units.js'
   import {
     project,
     selection,
     keys,
     ui,
     toolState,
-    calibration,
     historyStatus,
     wiringPreview,
-    setGrid,
-    setUnits,
     toggleSnap,
-    setWorld,
     setLockPitch,
+    setOpenPopup,
+    closeOpenPopup,
     duplicateSelected,
     mirrorSelected,
     rotateSelectedBy,
@@ -22,15 +19,16 @@
     setWiringLabels
   } from '../state/project.svelte.js'
   import { undo, redo } from '../state/history.js'
-  import { gridStep } from '../core/model.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import ImagePanel from './ImagePanel.svelte'
+  import GridPanel from './GridPanel.svelte'
+  import WorldPanel from './WorldPanel.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
   import Help from './Help.svelte'
 
   let stripsDialog
   let pixelsDialog
-  let imagePanel
+  let toolbarEl
 
   const hasSelection = $derived(selection.ids.length > 0)
 
@@ -38,147 +36,96 @@
   // what dragging would actually do right now.
   const effectiveSnap = $derived(project.grid.snap !== keys.alt)
 
+  // Keeps --toolbar-h current on the document root so the Grid/World/Reference
+  // image popups (app.css .floating-panel) stay anchored just under the
+  // toolbar even as it wraps onto a second row at narrow widths.
+  $effect(() => {
+    if (!toolbarEl) return
+    const root = document.documentElement
+    const set = () => root.style.setProperty('--toolbar-h', `${toolbarEl.offsetHeight}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(toolbarEl)
+    return () => ro.disconnect()
+  })
 </script>
 
-<div class="toolbar">
-  <button onclick={() => stripsDialog.open('line')}>Add strip</button>
-  <button onclick={() => pixelsDialog.open()}>Add pixels</button>
-  <button title="Add an arc, circle, or polygon strip" onclick={() => stripsDialog.open('shape')}>Add shape</button>
-  <button title="Add a cubic bezier strip" onclick={() => stripsDialog.open('bezier')}>Add Bezier</button>
-  <button title="Reference image: load, position, opacity, calibrate" onclick={() => imagePanel.toggle()}>Reference image</button>
-
-  <span class="sep"></span>
-
-  <button class="icon-only" title="Undo (Ctrl/Cmd+Z)" disabled={!historyStatus.canUndo} onclick={undo}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <path d="M4 7h6a3.5 3.5 0 1 1 0 7H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-      <path d="M4 7 L7 4 M4 7 L7 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  </button>
-  <button class="icon-only" title="Redo (Shift+Ctrl/Cmd+Z or Ctrl+Y)" disabled={!historyStatus.canRedo} onclick={redo}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <path d="M12 7H6a3.5 3.5 0 1 0 0 7h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-      <path d="M12 7 L9 4 M12 7 L9 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  </button>
-
-  <span class="sep"></span>
-
-  <button
-    class="snap-indicator"
-    class:active={wiringPreview.active}
-    title="Toggle wiring preview: animates a highlight chasing the wire order (hotkey: W)"
-    onclick={toggleWiringPreview}
-  >
-    Wiring {wiringPreview.active ? 'on' : 'off'}
-  </button>
-  {#if wiringPreview.active}
-    <label class="num">
-      <span class="label-row">
-        Speed
-        <Help text="LEDs per second the wiring preview's highlight moves through the chase (global index) order." />
-      </span>
-      <input
-        type="range"
-        min="1"
-        max="200"
-        step="1"
-        value={wiringPreview.speed}
-        oninput={(e) => setWiringSpeed(parseFloat(e.target.value))}
-      />
-    </label>
-    <label class="chk">
-      <input type="checkbox" checked={wiringPreview.showLabels} onchange={(e) => setWiringLabels(e.target.checked)} />
-      Labels
-      <Help text="Shows each LED's global index next to it, but only once zoomed in enough to read (on-screen LED spacing over ~14px)." />
-    </label>
-  {/if}
-
-  <span class="sep"></span>
-
-  <button
-    class="snap-indicator"
-    class:active={effectiveSnap}
-    title="Snap to grid (hotkey: S). Off by default: hold Alt while dragging to snap; with snap on, Alt turns it off."
-    onclick={toggleSnap}
-  >
-    Snap {effectiveSnap ? 'on' : 'off'}
-    <span class="key-badge" class:active={keys.alt}>Alt</span>
-  </button>
-
-  <label class="chk">
-    <input type="checkbox" checked={project.grid.show} onchange={(e) => setGrid({ show: e.target.checked })} />
-    Grid
-  </label>
-
-  <label class="num">
-    <span class="label-row">
-      Grid divisions
-      <Help text="Grid lines per world-box edge. Snap step = world size / divisions." />
-    </span>
-    <input
-      type="number"
-      min="1"
-      step="1"
-      value={project.grid.divisions}
-      onchange={(e) => setGrid({ divisions: Math.max(1, parseInt(e.target.value) || 1) })}
-    />
-  </label>
-  <span class="grid-step">({+gridStep(project).toFixed(3)} {project.units}/div)</span>
-
-  <!-- World + Transform cluster: one flex item, so it wraps to the next toolbar
-       row as a unit. Each group is nowrap; the cluster only splits into two
-       rows when it alone is wider than the toolbar. -->
-  <div class="tb-cluster">
-  <div class="tb-group world-group">
-    <div class="world-fields">
-      <span class="label-row world-title">
-        World
-        <Help
-          text="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage. Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it."
-        />
-      </span>
-      <label class="num">
-        X
-        <input
-          type="number"
-          value={fmt(project.world.x)}
-          onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
-        />
-      </label>
-      <label class="num">
-        Y
-        <input
-          type="number"
-          value={fmt(project.world.y)}
-          onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
-        />
-      </label>
-      <label class="num">
-        Size
-        <input
-          type="number"
-          min="0.001"
-          value={fmt(project.world.size)}
-          onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
-        />
-      </label>
-      <span class="units-suffix">{project.units}</span>
-    </div>
-
-    <label class="num">
-      Units
-      <select value={project.units} onchange={(e) => setUnits(e.target.value)}>
-        <option value="mm">mm</option>
-        <option value="in">in</option>
-        <option value="px">px</option>
-      </select>
-    </label>
+<div class="toolbar" bind:this={toolbarEl}>
+  <div class="tb-section">
+    <button onclick={() => stripsDialog.open('line')}>Add strip</button>
+    <button onclick={() => pixelsDialog.open()}>Add pixels</button>
+    <button title="Add an arc, circle, or polygon strip" onclick={() => stripsDialog.open('shape')}>Add shape</button>
+    <button title="Add a cubic bezier strip" onclick={() => stripsDialog.open('bezier')}>Add Bezier</button>
   </div>
 
-  <div class="tb-group transform-group">
-    <span class="sep"></span>
+  <span class="sep"></span>
 
+  <div class="tb-section">
+    <button class="icon-only" title="Undo (Ctrl/Cmd+Z)" disabled={!historyStatus.canUndo} onclick={undo}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <path d="M4 7h6a3.5 3.5 0 1 1 0 7H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        <path d="M4 7 L7 4 M4 7 L7 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+    <button class="icon-only" title="Redo (Shift+Ctrl/Cmd+Z or Ctrl+Y)" disabled={!historyStatus.canRedo} onclick={redo}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <path d="M12 7H6a3.5 3.5 0 1 0 0 7h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        <path d="M12 7 L9 4 M12 7 L9 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+  </div>
+
+  <span class="sep"></span>
+
+  <div class="tb-section">
+    <button
+      class="toggle-indicator"
+      class:active={wiringPreview.active}
+      title="Toggle wiring preview: animates a highlight chasing the wire order (hotkey: W)"
+      onclick={toggleWiringPreview}
+    >
+      Wiring {wiringPreview.active ? 'on' : 'off'}
+    </button>
+    {#if wiringPreview.active}
+      <label class="num">
+        <span class="label-row">
+          Speed
+          <Help text="LEDs per second the wiring preview's highlight moves through the chase (global index) order." />
+        </span>
+        <input
+          type="range"
+          min="1"
+          max="200"
+          step="1"
+          value={wiringPreview.speed}
+          oninput={(e) => setWiringSpeed(parseFloat(e.target.value))}
+        />
+      </label>
+      <label class="chk">
+        <input type="checkbox" checked={wiringPreview.showLabels} onchange={(e) => setWiringLabels(e.target.checked)} />
+        Labels
+        <Help text="Shows each LED's global index next to it, but only once zoomed in enough to read (on-screen LED spacing over ~14px)." />
+      </label>
+    {/if}
+  </div>
+
+  <span class="sep"></span>
+
+  <div class="tb-section">
+    <button
+      class="toggle-indicator"
+      class:active={effectiveSnap}
+      title="Snap to grid (hotkey: S). Off by default: hold Alt while dragging to snap; with snap on, Alt turns it off."
+      onclick={toggleSnap}
+    >
+      Snap {effectiveSnap ? 'on' : 'off'}
+      <span class="key-badge" class:active={keys.alt}>Alt</span>
+    </button>
+  </div>
+
+  <span class="sep"></span>
+
+  <div class="tb-section">
     <button title="Duplicate selection (Ctrl/Cmd+D)" disabled={!hasSelection} onclick={duplicateSelected}>
       <svg viewBox="0 0 16 16" width="15" height="15">
         <rect x="2" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
@@ -219,35 +166,68 @@
     </label>
   </div>
 
+  <div class="tb-section right">
+    <button
+      class="popup-toggle"
+      class:active={ui.openPopup === 'grid'}
+      title="Grid: show/hide, divisions"
+      onclick={() => setOpenPopup('grid')}
+    >
+      Grid
+    </button>
+    <button
+      class="popup-toggle"
+      class:active={ui.openPopup === 'world'}
+      title="World box: origin, size, units"
+      onclick={() => setOpenPopup('world')}
+    >
+      World
+    </button>
+    <button
+      class="popup-toggle"
+      class:active={ui.openPopup === 'image'}
+      title="Reference image: load, position, opacity, calibrate"
+      onclick={() => setOpenPopup('image')}
+    >
+      Reference image
+    </button>
   </div>
 </div>
 
 <AddStripsDialog bind:this={stripsDialog} />
 <AddPixelsDialog bind:this={pixelsDialog} />
-<ImagePanel bind:this={imagePanel} />
+<GridPanel open={ui.openPopup === 'grid'} onClose={closeOpenPopup} />
+<WorldPanel open={ui.openPopup === 'world'} onClose={closeOpenPopup} />
+<ImagePanel open={ui.openPopup === 'image'} onClose={closeOpenPopup} />
 
 <style>
   .toolbar {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0.5rem 1rem;
+    padding: var(--space-2) var(--space-4);
     background: var(--panel-bg);
     border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  /* One run of controls between dividers: nowrap so the toolbar only ever
+     wraps whole sections onto the next row. A section may wrap internally
+     only as a last resort, if it alone is wider than the toolbar. */
+  .tb-section {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 100%;
+  }
+  .tb-section.right {
+    margin-left: auto;
     flex-wrap: wrap;
   }
   .sep {
     width: 1px;
     align-self: stretch;
     background: var(--border);
-  }
-  .grid-step {
-    display: inline-block;
-    min-width: 8.5rem;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    font-size: 0.78rem;
-    color: var(--muted);
   }
   .chk,
   .num {
@@ -261,58 +241,19 @@
     align-items: flex-start;
     gap: 0.15rem;
   }
-  .num input,
-  .num select {
+  .num input {
     width: 4.5rem;
   }
   .label-row {
     width: 100%;
-  }
-  .world-fields {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.5rem;
-  }
-  .world-fields .world-title {
-    align-self: flex-start;
-    font-size: 0.85rem;
-    color: var(--fg);
-    width: auto;
-    margin-right: 0.25rem;
-  }
-  .world-fields .num input {
-    width: 4.2rem;
-  }
-  .units-suffix {
-    display: inline-block;
-    width: 1.6rem;
-    color: var(--muted);
-    font-size: 0.78rem;
-    padding-bottom: 0.35rem;
-  }
-  /* World + Transform as one flex item: no shrink, so it stays on row one when
-     it fits and otherwise moves to the next row whole. max-width caps it at the
-     toolbar width; only then do its two nowrap groups wrap internally. */
-  .tb-cluster {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 0.5rem 1rem;
-    flex: 0 0 auto;
-    max-width: 100%;
-  }
-  .tb-group {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: flex-end;
-    gap: 0.75rem;
   }
   button {
     background: var(--accent);
     color: #0b0d10;
     border: none;
     border-radius: 4px;
-    padding: 0.4rem 0.8rem;
+    height: var(--control-h);
+    padding: 0 0.8rem;
     font-weight: 600;
     cursor: pointer;
     display: inline-flex;
@@ -327,11 +268,11 @@
     cursor: not-allowed;
   }
   .icon-only {
-    padding: 0.4rem 0.5rem;
+    padding: 0 0.5rem;
   }
   /* Fixed footprints: text that changes (on/off, step, units) must not
      resize its item and shift the rest of the toolbar. */
-  .snap-indicator {
+  .toggle-indicator {
     width: 8.5rem;
     flex-shrink: 0;
     justify-content: center;
@@ -340,7 +281,22 @@
     border: 1px solid var(--border);
     font-weight: 500;
   }
-  .snap-indicator.active {
+  .toggle-indicator.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  /* Same active styling as .toggle-indicator, but these three labels (Grid,
+     World, Reference image) never change text, so no fixed width is needed. */
+  .popup-toggle {
+    flex-shrink: 0;
+    white-space: nowrap;
+    background: var(--input-bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .popup-toggle.active {
     background: var(--accent-dim);
     color: var(--accent);
     border-color: var(--accent);
