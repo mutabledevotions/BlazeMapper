@@ -1,6 +1,12 @@
 // Single project store (Svelte 5 runes) plus named action functions.
-// No undo/redo yet (phase 4). Keep all mutation behind these actions so
-// history.js can later wrap them without canvas/panel code changing.
+// Every discrete action calls historyCommit() (-> src/state/history.js) at
+// the end, which also marks the autosave manager dirty (see onHistoryChange
+// below). Continuous per-pointermove mutators used during a canvas drag
+// (moveHandle, translateStrip(s), rotateSelected, scaleSelected,
+// moveWorldOrigin, resizeWorld, updateImage) deliberately do NOT commit here --
+// Canvas.svelte/Handles.svelte wrap the whole gesture with history's
+// beginDrag()/commitDrag() instead, so a drag produces one history entry,
+// not one per pointermove.
 
 import { newProject, newStrip, newId, gridStep } from '../core/model.js'
 import {
@@ -16,6 +22,9 @@ import { stripsBbox } from '../core/layout.js'
 import { convert } from '../core/units.js'
 import { fitToBox, calibrateScale, convertImageUnits } from '../core/image.js'
 import { lastAddress, setStart, ensureAddresses, endAddress } from '../core/address.js'
+import { fitPointsToWorld } from '../core/import.js'
+import { initHistory, commit as historyCommit, canUndo, canRedo } from './history.js'
+import { serializeProject, createAutosaveManager } from './persist.js'
 
 export const project = $state(newProject())
 // Defensive migration -- a no-op today (newProject starts with no strips), but
@@ -53,6 +62,55 @@ export function cancelCalibration() {
 // Multi-select: ids is the full selected set, primary is the one Strip properties
 // edits (and the one Handles are drawn for, when ids.length === 1).
 export const selection = $state({ ids: [], primary: null })
+
+// --- Autosave (src/state/persist.js) ---------------------------------------
+// kind: 'idle' (nothing committed yet this session -- the drawer shows nothing),
+// 'dirty' (a change is waiting on the 5s throttle), 'saved' (last write
+// succeeded, savedAt is its time), or 'unavailable' (IndexedDB failed/missing --
+// the app otherwise keeps working). markDirty() is called on every history
+// commit below, per the phase 4 plan ("every committed change marks dirty").
+export const autosaveStatus = $state({ kind: 'idle', savedAt: null })
+
+const autosave = createAutosaveManager({
+  getSnapshot: () => serializeProject($state.snapshot(project), $state.snapshot(imageSrc)),
+  onStatus: (s) => {
+    autosaveStatus.kind = s.kind
+    if (s.savedAt) autosaveStatus.savedAt = s.savedAt
+  }
+})
+
+// --- History (src/state/history.js) ----------------------------------------
+// Wired once, here: getSnapshot/restoreSnapshot work on `project` alone
+// (imageSrc is already kept out of it -- see above, and it's excluded from
+// undo/redo snapshots on purpose). onChange fires on every commit/commitDrag/
+// undo/redo: it refreshes the toolbar's enabled state and marks the autosave
+// manager dirty, since the two share the same commit points by design.
+export const historyStatus = $state({ canUndo: false, canRedo: false })
+
+function projectSnapshot() {
+  return structuredClone($state.snapshot(project))
+}
+
+function restoreProjectSnapshot(data) {
+  for (const key of Object.keys(project)) delete project[key]
+  Object.assign(project, data)
+  // Restoring a snapshot must keep selection valid -- drop ids for strips
+  // that no longer exist in the restored state (undo past their creation,
+  // or redo past their deletion).
+  const ids = new Set(project.strips.map((s) => s.id))
+  selection.ids = selection.ids.filter((id) => ids.has(id))
+  if (selection.primary !== null && !ids.has(selection.primary)) {
+    selection.primary = selection.ids[selection.ids.length - 1] ?? null
+  }
+}
+
+function onHistoryChange() {
+  historyStatus.canUndo = canUndo()
+  historyStatus.canRedo = canRedo()
+  autosave.markDirty()
+}
+
+initHistory({ getSnapshot: projectSnapshot, restoreSnapshot: restoreProjectSnapshot, onChange: onHistoryChange })
 
 // Current view centre in world units, kept up to date by Canvas.svelte on every
 // pan/zoom. "Add strip"/"Add pixels" place new geometry here instead of the origin.
@@ -101,6 +159,22 @@ export function setLockPitch(v) {
   toolState.lockPitch = v
 }
 
+// Wiring preview (toolbar toggle, hotkey W): a tool/view preference like
+// toolState above, not project data -- not saved, not undo-able.
+export const wiringPreview = $state({ active: false, speed: 30, showLabels: false })
+
+export function toggleWiringPreview() {
+  wiringPreview.active = !wiringPreview.active
+}
+
+export function setWiringSpeed(v) {
+  wiringPreview.speed = Math.max(0.1, v || 1)
+}
+
+export function setWiringLabels(v) {
+  wiringPreview.showLabels = v
+}
+
 // Replaces project.strips with the result of an address.js operation (setStart /
 // ensureAddresses), which returns a new array rather than mutating in place.
 function applyAddressResult(nextStrips) {
@@ -118,6 +192,7 @@ export function addStrip(geomType = 'line', opts = {}) {
   if (strip.start === undefined) strip.start = channelLastAddress(strip.channel) + 1
   project.strips.push(strip)
   selectStrip(strip.id)
+  historyCommit()
   return strip
 }
 
@@ -165,6 +240,7 @@ export function addStrips(opts) {
   }
 
   if (created.length) selectStrips(created.map((s) => s.id))
+  historyCommit()
   return created
 }
 
@@ -193,7 +269,53 @@ export function addPixels(count, spacing, channel = 0) {
     added.push(px.id)
   }
   selectStrips(added)
+  historyCommit()
   return added
+}
+
+// Phase 4 import: one points strip from an imported Pixelblaze map (relaxed
+// JSON array or evaluated generator function -- src/core/import.js parses
+// either into plain {x,y,z} points). Fitted into the current world box
+// (contain, keep aspect), wire order preserved, named "Imported map", placed
+// at the next free address on the chosen channel.
+export function importMap(points, channel = 0) {
+  const fitted = fitPointsToWorld(points, project.world)
+  const strip = newStrip('points', {
+    name: 'Imported map',
+    channel,
+    geom: { pts: fitted.map((p) => ({ x: p.x, y: p.y })) }
+  })
+  if (strip.start === undefined) strip.start = channelLastAddress(strip.channel) + 1
+  project.strips.push(strip)
+  selectStrip(strip.id)
+  historyCommit()
+  return strip
+}
+
+// Phase 4 import: a project file replaces the project wholesale (after an
+// in-dialog confirm -- ImportDialog.svelte). `data` is the parsed project
+// object (version, strips, ...); `imageData` is the optional reference-image
+// pixel data from a serializeProject() record (src/state/persist.js).
+export function replaceProject(data, imageData) {
+  const fresh = newProject()
+  Object.assign(fresh, data)
+  fresh.strips = ensureAddresses(Array.isArray(data.strips) ? data.strips : [])
+  for (const key of Object.keys(project)) delete project[key]
+  Object.assign(project, fresh)
+  if (imageData && imageData.dataUrl) {
+    imageSrc.dataUrl = imageData.dataUrl
+    imageSrc.naturalW = imageData.naturalW || 0
+    imageSrc.naturalH = imageData.naturalH || 0
+    imageSrc.name = imageData.name || ''
+  } else {
+    imageSrc.dataUrl = null
+    imageSrc.naturalW = 0
+    imageSrc.naturalH = 0
+    imageSrc.name = ''
+  }
+  clearSelection()
+  cancelCalibration()
+  historyCommit()
 }
 
 // channel and ledCount both affect addressing, so they need the push rule
@@ -212,6 +334,7 @@ export function updateStrip(id, patch) {
   } else if (hasLedCount) {
     applyAddressResult(setStart(project.strips, id, strip.start))
   }
+  historyCommit()
 }
 
 // Strip properties' Address field and nudge buttons: explicit insert-and-push
@@ -221,6 +344,7 @@ export function setStripStart(id, start) {
   const strip = project.strips.find((s) => s.id === id)
   if (!strip || strip.locked) return
   applyAddressResult(setStart(project.strips, id, start))
+  historyCommit()
 }
 
 // Strip list drag-reorder: the dropped position's new start is "right after
@@ -238,6 +362,7 @@ export function moveStripToAddress(id, channel, afterId) {
     if (after) newStart = endAddress(after) + 1
   }
   applyAddressResult(setStart(project.strips, id, newStart))
+  historyCommit()
 }
 
 // Switches a line strip's spacing mode. Entering 'fit' seeds p1 at the strip's
@@ -251,6 +376,7 @@ export function setSpacing(id, mode) {
     strip.geom = { ...strip.geom, p1: { x: last.x, y: last.y } }
   }
   strip.spacing = mode
+  historyCommit()
 }
 
 export function removeStrip(id) {
@@ -258,6 +384,7 @@ export function removeStrip(id) {
   if (i === -1) return
   project.strips.splice(i, 1)
   deselect(id)
+  historyCommit()
 }
 
 // --- Selection -------------------------------------------------------------
@@ -320,6 +447,7 @@ export function removeSelected() {
     if (i !== -1) project.strips.splice(i, 1)
   }
   clearSelection()
+  historyCommit()
 }
 
 export function moveHandle(id, handleId, pt, opts = {}) {
@@ -364,6 +492,7 @@ export function rotateSelectedBy(deg) {
   if (!box) return
   const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
   rotateSelected(deg, center)
+  historyCommit()
 }
 
 // Duplicate: clones every selected, unlocked strip with a new id and
@@ -390,6 +519,7 @@ export function duplicateSelected() {
   }
   newIds.reverse()
   if (newIds.length) selectStrips(newIds)
+  historyCommit()
   return newIds
 }
 
@@ -400,6 +530,7 @@ export function mirrorSelected(axis) {
   if (!box) return
   const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
   for (const s of strips) s.geom = geomMirror(s.geom, axis, center)
+  historyCommit()
 }
 
 // Group-resize corner handle (and single-selection resize). k is the
@@ -433,9 +564,13 @@ export function scaleSelected(k, anchor, lockPitch) {
 }
 
 // Arrow-key / nudge-button translate: every selected, unlocked strip by the
-// same delta (translateStrip already skips locked strips).
+// same delta (translateStrip already skips locked strips). Always a single
+// discrete call (one keypress or button click), so it commits directly --
+// unlike translateStrip(s)'s other caller, the canvas drag, which commits
+// once per gesture via history.beginDrag()/commitDrag() instead.
 export function nudgeSelected(dx, dy) {
   translateStrips(selection.ids, dx, dy)
+  historyCommit()
 }
 
 // Converts every length in the project so the physical layout is unchanged.
@@ -459,6 +594,7 @@ export function setUnits(units) {
     project.image.scale = round3(converted.scale)
   }
   project.units = units
+  historyCommit()
 }
 
 function round3(n) {
@@ -467,19 +603,26 @@ function round3(n) {
 
 export function setExport(patch) {
   Object.assign(project.export, patch)
+  historyCommit()
 }
 
 export function setGrid(patch) {
   Object.assign(project.grid, patch)
+  historyCommit()
 }
 
 export function toggleSnap() {
   project.grid.snap = !project.grid.snap
+  historyCommit()
 }
 
-// World box: strips never move when the box moves or resizes.
+// World box: strips never move when the box moves or resizes. This is the
+// discrete entry point (toolbar X/Y/Size fields) -- the canvas drag equivalents
+// (moveWorldOrigin/resizeWorld below) are called per pointermove and commit
+// once per gesture instead, via history.beginDrag()/commitDrag().
 export function setWorld(patch) {
   Object.assign(project.world, patch)
+  historyCommit()
 }
 
 export function moveWorldOrigin(dx, dy) {
@@ -519,12 +662,18 @@ export function loadImage(file) {
         locked: false,
         visible: true
       }
+      historyCommit()
     }
     probe.src = dataUrl
   }
   reader.readAsDataURL(file)
 }
 
+// Continuous mutator: used both by discrete field edits (ImagePanel's
+// visible/lock/opacity/rotation/scale, which call commit() themselves right
+// after) and by the canvas's per-pointermove image drag/scale/rotate (which
+// does NOT commit per call -- Canvas.svelte wraps the whole gesture with
+// history.beginDrag()/commitDrag() instead).
 export function updateImage(patch) {
   if (!project.image) return
   Object.assign(project.image, patch)
@@ -537,6 +686,7 @@ export function removeImage() {
   imageSrc.naturalH = 0
   imageSrc.name = ''
   cancelCalibration()
+  historyCommit()
 }
 
 // Two-point calibration: scales the image about its own centre so |p1-p2|
@@ -545,5 +695,8 @@ export function removeImage() {
 export function calibrateImage(p1, p2, realDistance) {
   if (!project.image) return
   const result = calibrateScale(project.image, p1, p2, realDistance)
-  if (result) Object.assign(project.image, result)
+  if (result) {
+    Object.assign(project.image, result)
+    historyCommit()
+  }
 }

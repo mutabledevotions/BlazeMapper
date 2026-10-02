@@ -5,6 +5,9 @@
 // what the user is currently doing (idle / selection / mid-drag / typing).
 
 export const HOTKEYS = [
+  { keys: 'Ctrl/Cmd+Z', desc: 'Undo' },
+  { keys: 'Shift+Ctrl/Cmd+Z or Ctrl+Y', desc: 'Redo' },
+  { keys: 'W', desc: 'Toggle the wiring preview (animated chase through wire order)' },
   { keys: 'S', desc: 'Toggle grid snap' },
   { keys: 'Alt (hold while dragging)', desc: 'Temporarily inverts snap for that drag' },
   { keys: 'F', desc: "Fit the view to the world box plus every strip's bounding box" },
@@ -29,7 +32,7 @@ export const HOTKEYS = [
 // field, otherwise picked by the current drag mode (set by Canvas.svelte) or
 // by whether anything is selected.
 export const CONTEXT_HINTS = {
-  idle: 'Drag: select · Scroll/Space-drag: pan · Pinch/Ctrl+wheel: zoom · F: fit · S: snap',
+  idle: 'Drag: select · Scroll/Space-drag: pan · Pinch/Ctrl+wheel: zoom · F: fit · S: snap · W: wiring preview',
   selection: 'Drag: move · ⌘D: duplicate · [ ]: rotate 90° · Del: delete · Esc: deselect',
   endHandleDrag: 'Shift: 15° · ⌘/Ctrl: change LED count · Alt: invert snap',
   groupResizeDrag: 'Lock pitch: on/off',

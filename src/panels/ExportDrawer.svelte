@@ -1,12 +1,15 @@
 <script>
   // Collapsible bottom drawer (replaces the old right-sidebar export panel).
-  // Header bar (pixel count, warnings badge, Copy) stays visible when collapsed.
-  // Resizable by dragging the top edge.
-  import { project, setExport } from '../state/project.svelte.js'
+  // Header bar (pixel count, warnings badge, Import/Copy map/Download map/Save
+  // project, autosave status) stays visible when collapsed. Resizable by
+  // dragging the top edge.
+  import { project, imageSrc, autosaveStatus, setExport } from '../state/project.svelte.js'
   import { computePixels } from '../core/layout.js'
   import { toMapJSON, channelSummary } from '../core/export.js'
   import { validateProject } from '../core/validate.js'
+  import { serializeProject } from '../state/persist.js'
   import Help from './Help.svelte'
+  import ImportDialog from './ImportDialog.svelte'
 
   const LIMITS = { RGB: 240, RGBW: 180 }
 
@@ -16,12 +19,26 @@
   const warnings = $derived(validateProject(project))
   const hasError = $derived(warnings.some((w) => w.level === 'error'))
 
+  // Export drawer header: "Saved hh:mm:ss" / "Unsaved changes" / "Autosave
+  // unavailable", or nothing before the first change this session.
+  const autosaveText = $derived.by(() => {
+    if (autosaveStatus.kind === 'saved' && autosaveStatus.savedAt) {
+      const d = new Date(autosaveStatus.savedAt)
+      const pad = (n) => String(n).padStart(2, '0')
+      return `Saved ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    }
+    if (autosaveStatus.kind === 'dirty') return 'Unsaved changes'
+    if (autosaveStatus.kind === 'unavailable') return 'Autosave unavailable'
+    return ''
+  })
+
   let collapsed = $state(true)
   let height = $state(260)
   let resizing = null
 
   let textareaEl
   let copyStatus = $state('')
+  let importDialog
 
   async function onCopy() {
     try {
@@ -36,14 +53,23 @@
     setTimeout(() => (copyStatus = ''), 1500)
   }
 
-  function onDownload() {
-    const blob = new Blob([mapJSON], { type: 'application/json' })
+  function downloadBlob(content, type, filename) {
+    const blob = new Blob([content], { type })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'pixelmap.json'
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  function onDownload() {
+    downloadBlob(mapJSON, 'application/json', 'pixelmap.json')
+  }
+
+  function onSaveProject() {
+    const record = serializeProject($state.snapshot(project), $state.snapshot(imageSrc))
+    downloadBlob(JSON.stringify(record), 'application/json', 'project.pixelmap.json')
   }
 
   function onResizeStart(evt) {
@@ -76,8 +102,13 @@
       <span class="badge" class:error={hasError}>{warnings.length} warning{warnings.length === 1 ? '' : 's'}</span>
     {/if}
     <span class="spacer"></span>
-    <button onclick={onCopy}>{copyStatus || 'Copy'}</button>
-    <button onclick={onDownload}>Download .json</button>
+    {#if autosaveText}
+      <span class="autosave-status" class:unavailable={autosaveStatus.kind === 'unavailable'}>{autosaveText}</span>
+    {/if}
+    <button class="secondary" onclick={() => importDialog.open()}>Import</button>
+    <button onclick={onCopy}>{copyStatus || 'Copy map'}</button>
+    <button onclick={onDownload}>Download map</button>
+    <button onclick={onSaveProject}>Save project</button>
   </div>
 
   {#if !collapsed}
@@ -147,6 +178,8 @@
   {/if}
 </div>
 
+<ImportDialog bind:this={importDialog} />
+
 <style>
   .export-drawer {
     position: relative;
@@ -197,6 +230,14 @@
   .spacer {
     flex: 1;
   }
+  .autosave-status {
+    color: var(--muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .autosave-status.unavailable {
+    color: #ff8a65;
+  }
   .header button:not(.collapse) {
     background: var(--accent);
     color: #0b0d10;
@@ -206,6 +247,12 @@
     font-weight: 600;
     cursor: pointer;
     font-size: 0.8rem;
+  }
+  .header button.secondary {
+    background: var(--input-bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    font-weight: 500;
   }
   .body {
     flex: 1;

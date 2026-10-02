@@ -1,6 +1,7 @@
 <script>
   // Draggable control handles for the selected strip's geometry.
   import { handles } from '../core/geometry/index.js'
+  import { beginDrag } from '../state/history.js'
 
   let { strip, px = 1, onHandleDrag } = $props()
   const size = $derived(10 * px) // 10 screen px
@@ -23,6 +24,7 @@
   function pointerDown(id, evt) {
     if (strip.locked) return
     dragId = id
+    beginDrag()
     evt.currentTarget.setPointerCapture(evt.pointerId)
     evt.stopPropagation()
   }

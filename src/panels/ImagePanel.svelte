@@ -17,6 +17,7 @@
   } from '../state/project.svelte.js'
   import { fitToBox } from '../core/image.js'
   import { quantizeAngle } from '../core/geometry/line.js'
+  import { commit } from '../state/history.js'
   import Help from './Help.svelte'
 
   let fileInput
@@ -37,6 +38,16 @@
   function fitToWorld() {
     if (!project.image || !imageSrc.naturalW) return
     updateImage(fitToBox(imageSrc.naturalW, imageSrc.naturalH, project.world))
+    commit()
+  }
+
+  // Discrete field edits (checkboxes, number inputs, the opacity slider's
+  // release) commit immediately; the opacity slider's own oninput stays a
+  // raw updateImage() call for live preview while dragging, same as the
+  // canvas's drag gestures -- see project.svelte.js's updateImage comment.
+  function setImage(patch) {
+    updateImage(patch)
+    commit()
   }
 
   function toggleCalibrate() {
@@ -84,12 +95,12 @@
 
   {#if project.image}
     <label class="chk">
-      <input type="checkbox" checked={project.image.visible} onchange={(e) => updateImage({ visible: e.target.checked })} />
+      <input type="checkbox" checked={project.image.visible} onchange={(e) => setImage({ visible: e.target.checked })} />
       Visible
     </label>
 
     <label class="chk">
-      <input type="checkbox" checked={project.image.locked} onchange={(e) => updateImage({ locked: e.target.checked })} />
+      <input type="checkbox" checked={project.image.locked} onchange={(e) => setImage({ locked: e.target.checked })} />
       Lock
       <Help text="Locked images ignore drag, scale, and rotate on the canvas, so clicks reach strips and the marquee instead. Hotkey: I." />
     </label>
@@ -103,6 +114,7 @@
         step="0.01"
         value={project.image.opacity}
         oninput={(e) => updateImage({ opacity: parseFloat(e.target.value) })}
+        onchange={commit}
       />
     </label>
 
@@ -112,7 +124,7 @@
         type="number"
         step="0.5"
         value={fmt(project.image.rotation)}
-        onchange={(e) => updateImage({ rotation: quantizeAngle(parseFloat(e.target.value) || 0) })}
+        onchange={(e) => setImage({ rotation: quantizeAngle(parseFloat(e.target.value) || 0) })}
       />
     </label>
 
@@ -126,7 +138,7 @@
         min="0.000001"
         step="any"
         value={fmt(project.image.scale)}
-        onchange={(e) => updateImage({ scale: Math.max(1e-6, parseFloat(e.target.value) || project.image.scale) })}
+        onchange={(e) => setImage({ scale: Math.max(1e-6, parseFloat(e.target.value) || project.image.scale) })}
       />
     </label>
 

@@ -1,11 +1,41 @@
 <script>
+  import { onMount } from 'svelte'
   import Toolbar from './panels/Toolbar.svelte'
   import StripList from './panels/StripList.svelte'
   import StripProps from './panels/StripProps.svelte'
   import ExportDrawer from './panels/ExportDrawer.svelte'
   import Canvas from './canvas/Canvas.svelte'
   import HintOverlay from './canvas/HintOverlay.svelte'
-  import { setKeyState, clearKeys, setTyping } from './state/project.svelte.js'
+  import { setKeyState, clearKeys, setTyping, replaceProject } from './state/project.svelte.js'
+  import { readAutosave, clearAutosave, deserializeProject } from './state/persist.js'
+
+  // Startup autosave check: an in-app banner (not confirm()) -- see
+  // src/state/persist.js for the IndexedDB record shape. Only shown when a
+  // record actually exists; silently does nothing if IndexedDB is unavailable
+  // (readAutosave() already swallows that and resolves null).
+  let autosaveBanner = $state(null) // { savedAt, record } | null
+
+  onMount(async () => {
+    const record = await readAutosave()
+    if (record) autosaveBanner = record
+  })
+
+  function restoreAutosave() {
+    if (!autosaveBanner) return
+    const { project: data, imageData } = deserializeProject(autosaveBanner)
+    replaceProject(data, imageData)
+    autosaveBanner = null
+  }
+
+  function discardAutosave() {
+    autosaveBanner = null
+    clearAutosave()
+  }
+
+  function formatSavedAt(ms) {
+    if (!ms) return ''
+    return new Date(ms).toLocaleString()
+  }
 
   // Single window-level listener for the live modifier-key state (keys in the
   // store) that the Snap button, drag badges, and the hotkey hint line all read.
@@ -97,6 +127,13 @@
 />
 
 <div class="app">
+  {#if autosaveBanner}
+    <div class="autosave-banner">
+      <span>Restore autosave from {formatSavedAt(autosaveBanner.savedAt)}?</span>
+      <button onclick={restoreAutosave}>Restore</button>
+      <button class="ghost" onclick={discardAutosave}>Discard</button>
+    </div>
+  {/if}
   <div class="toolbar-row">
     <Toolbar />
   </div>
@@ -169,5 +206,30 @@
     position: relative;
     flex: 1;
     min-width: 0;
+  }
+  .autosave-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: var(--accent-dim);
+    border-bottom: 1px solid var(--accent);
+    font-size: 0.85rem;
+  }
+  .autosave-banner button {
+    background: var(--accent);
+    color: #0b0d10;
+    border: none;
+    border-radius: 4px;
+    padding: 0.3rem 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .autosave-banner button.ghost {
+    background: none;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    font-weight: 500;
   }
 </style>

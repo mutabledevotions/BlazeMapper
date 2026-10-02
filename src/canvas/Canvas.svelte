@@ -43,7 +43,10 @@
   import StripView from './StripView.svelte'
   import Handles from './Handles.svelte'
   import RefImage from './RefImage.svelte'
+  import WiringPreview from './WiringPreview.svelte'
   import { convert } from '../core/units.js'
+  import { beginDrag, commitDrag, commit, undo, redo } from '../state/history.js'
+  import { wiringPreview, toggleWiringPreview } from '../state/project.svelte.js'
 
   let svgEl
   let viewBox = $state({ x: -50, y: -50, w: 600, h: 450 })
@@ -412,6 +415,10 @@
     }
     dragHandlePos = null
     setDragMode(null)
+    // One history entry per gesture: a no-op if beginDrag() was never called
+    // for this pointer session (a plain pan or marquee), or if nothing
+    // actually changed (see history.js's commitDrag()).
+    commitDrag()
   }
 
   // pointerdown on an already-selected strip drags the whole selection; on an
@@ -431,6 +438,7 @@
       return s && !s.locked
     })
     dragState = { ids: unlockedIds, startWorld: screenToWorld(evt), lastDx: 0, lastDy: 0 }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
     evt.stopPropagation()
   }
@@ -453,12 +461,14 @@
       lastDx: 0,
       lastDy: 0
     }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
   function startWorldResize(evt) {
     evt.stopPropagation()
     worldResizeState = true
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -469,6 +479,7 @@
     const start = screenToWorld(evt)
     const startAngle = (Math.atan2(start.y - center.y, start.x - center.x) * 180) / Math.PI
     rotateState = { center, startAngle, lastDeg: 0 }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -480,6 +491,7 @@
     evt.stopPropagation()
     if (!project.image || project.image.locked) return
     imageDragState = { startWorld: screenToWorld(evt), lastDx: 0, lastDy: 0 }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -489,6 +501,7 @@
     const start = screenToWorld(evt)
     const startDist = Math.hypot(start.x - project.image.x, start.y - project.image.y) || 1
     imageScaleState = { startDist, lastK: 1 }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -499,6 +512,7 @@
     const start = screenToWorld(evt)
     const startAngle = (Math.atan2(start.y - center.y, start.x - center.x) * 180) / Math.PI
     imageRotateState = { center, startAngle, lastDeg: 0 }
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -537,6 +551,7 @@
     const startDist = Math.hypot(start.x - anchor.x, start.y - anchor.y) || 1
     resizeState = { anchor, startDist, lastK: 1 }
     setDragMode('groupResize')
+    beginDrag()
     svgEl.setPointerCapture(evt.pointerId)
   }
 
@@ -568,8 +583,22 @@
     }
     if (evt.key === 's' || evt.key === 'S') toggleSnap()
     if (evt.key === 'f' || evt.key === 'F') fitView()
+    if (evt.key === 'w' || evt.key === 'W') toggleWiringPreview()
     if ((evt.key === 'i' || evt.key === 'I') && project.image) {
       updateImage({ locked: !project.image.locked })
+      commit()
+    }
+    // Undo/redo: Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z and Ctrl+Y redo. Ignored
+    // while typing (isTypingTarget() above already returned if so), so the
+    // input's own native undo still works there.
+    if ((evt.ctrlKey || evt.metaKey) && (evt.key === 'z' || evt.key === 'Z')) {
+      evt.preventDefault()
+      if (evt.shiftKey) redo()
+      else undo()
+    }
+    if (evt.ctrlKey && (evt.key === 'y' || evt.key === 'Y')) {
+      evt.preventDefault()
+      redo()
     }
     if (evt.key === 'Delete' || evt.key === 'Backspace') {
       if (selection.ids.length) {
@@ -688,6 +717,10 @@
       <Handles {strip} {px} onHandleDrag={(handleId, evt) => onHandleDrag(strip.id, handleId, evt)} />
     {/if}
   {/each}
+
+  {#if wiringPreview.active}
+    <WiringPreview {px} />
+  {/if}
 
   {#if selBbox}
     <rect

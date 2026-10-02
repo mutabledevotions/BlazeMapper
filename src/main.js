@@ -11,9 +11,13 @@ if (import.meta.env.DEV) {
     units: await import('./core/units.js'),
     geometry: await import('./core/geometry/index.js'),
     layout: await import('./core/layout.js'),
-    export: await import('./core/export.js')
+    export: await import('./core/export.js'),
+    import: await import('./core/import.js'),
+    throttle: await import('./core/throttle.js')
   }
-  window.pm = { store, core }
+  const history = await import('./state/history.js')
+  const persist = await import('./state/persist.js')
+  window.pm = { store, core, history, persist }
 }
 
 export default app

@@ -7,6 +7,8 @@
     ui,
     toolState,
     calibration,
+    historyStatus,
+    wiringPreview,
     setGrid,
     setUnits,
     toggleSnap,
@@ -14,8 +16,12 @@
     setLockPitch,
     duplicateSelected,
     mirrorSelected,
-    rotateSelectedBy
+    rotateSelectedBy,
+    toggleWiringPreview,
+    setWiringSpeed,
+    setWiringLabels
   } from '../state/project.svelte.js'
+  import { undo, redo } from '../state/history.js'
   import { gridStep } from '../core/model.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import ImagePanel from './ImagePanel.svelte'
@@ -40,6 +46,53 @@
   <button disabled title="Phase 5">Add shape</button>
   <button disabled title="Phase 5">Add Bezier</button>
   <button title="Reference image: load, position, opacity, calibrate" onclick={() => imagePanel.toggle()}>Reference image</button>
+
+  <span class="sep"></span>
+
+  <button class="icon-only" title="Undo (Ctrl/Cmd+Z)" disabled={!historyStatus.canUndo} onclick={undo}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <path d="M4 7h6a3.5 3.5 0 1 1 0 7H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+      <path d="M4 7 L7 4 M4 7 L7 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <button class="icon-only" title="Redo (Shift+Ctrl/Cmd+Z or Ctrl+Y)" disabled={!historyStatus.canRedo} onclick={redo}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <path d="M12 7H6a3.5 3.5 0 1 0 0 7h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+      <path d="M12 7 L9 4 M12 7 L9 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+
+  <span class="sep"></span>
+
+  <button
+    class="snap-indicator"
+    class:active={wiringPreview.active}
+    title="Toggle wiring preview: animates a highlight chasing the wire order (hotkey: W)"
+    onclick={toggleWiringPreview}
+  >
+    Wiring {wiringPreview.active ? 'on' : 'off'}
+  </button>
+  {#if wiringPreview.active}
+    <label class="num">
+      <span class="label-row">
+        Speed
+        <Help text="LEDs per second the wiring preview's highlight moves through the chase (global index) order." />
+      </span>
+      <input
+        type="range"
+        min="1"
+        max="200"
+        step="1"
+        value={wiringPreview.speed}
+        oninput={(e) => setWiringSpeed(parseFloat(e.target.value))}
+      />
+    </label>
+    <label class="chk">
+      <input type="checkbox" checked={wiringPreview.showLabels} onchange={(e) => setWiringLabels(e.target.checked)} />
+      Labels
+      <Help text="Shows each LED's global index next to it, but only once zoomed in enough to read (on-screen LED spacing over ~14px)." />
+    </label>
+  {/if}
 
   <span class="sep"></span>
 
@@ -272,6 +325,9 @@
   button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+  .icon-only {
+    padding: 0.4rem 0.5rem;
   }
   /* Fixed footprints: text that changes (on/off, step, units) must not
      resize its item and shift the rest of the toolbar. */

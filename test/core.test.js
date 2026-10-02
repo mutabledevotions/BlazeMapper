@@ -6,6 +6,10 @@ import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
 import { fitToBox, calibrateScale, imageCorners, imageBbox, convertImageUnits } from '../src/core/image.js'
 import { ledCount, endAddress, lastAddress, packChannel, setStart, ensureAddresses } from '../src/core/address.js'
+import { detectFormat, parseRelaxedJSON, fitPointsToWorld, evalMapFunction } from '../src/core/import.js'
+import { initThrottleState, onChange as throttleOnChange, checkDue } from '../src/core/throttle.js'
+import { serializeProject, deserializeProject } from '../src/state/persist.js'
+import { commit, undo, redo, canUndo, canRedo, resetHistory, beginDrag, commitDrag } from '../src/state/history.js'
 import {
   project,
   selection,
@@ -700,5 +704,219 @@ describe('core/address: ensureAddresses migration', () => {
   it('is a no-op (same reference) when every item already has a start', () => {
     const items = [strip('a', 0, 1, 10)]
     expect(ensureAddresses(items)).toBe(items)
+  })
+})
+
+describe('core/import: relaxed JSON', () => {
+  it('parses the Pixelblaze doc example (trailing comma)', () => {
+    expect(parseRelaxedJSON('[[0,0],[100,100],]')).toEqual([
+      [0, 0],
+      [100, 100]
+    ])
+  })
+
+  it('strips // and /* */ comments', () => {
+    const text = `[
+      [0,0], // first
+      /* second */ [10,0]
+    ]`
+    expect(parseRelaxedJSON(text)).toEqual([
+      [0, 0],
+      [10, 0]
+    ])
+  })
+
+  it('detectFormat parses a 2D map', () => {
+    const d = detectFormat('[[0,0],[10,10],]')
+    expect(d.kind).toBe('map')
+    expect(d.points).toEqual([
+      { x: 0, y: 0, z: 0 },
+      { x: 10, y: 10, z: 0 }
+    ])
+  })
+
+  it('detectFormat parses a 3D map', () => {
+    const d = detectFormat('[[0,0,0],[1,2,3]]')
+    expect(d.kind).toBe('map')
+    expect(d.points).toEqual([
+      { x: 0, y: 0, z: 0 },
+      { x: 1, y: 2, z: 3 }
+    ])
+  })
+
+  it('detectFormat recognizes a generator function without evaluating it', () => {
+    expect(detectFormat('function (pixelCount) { return []; }').kind).toBe('function')
+  })
+
+  it('evalMapFunction only runs on request and returns points', () => {
+    const src = 'function (pixelCount) { var a = []; for (var i = 0; i < pixelCount; i++) a.push([i, 0]); return a; }'
+    expect(evalMapFunction(src, 3)).toEqual([
+      { x: 0, y: 0, z: 0 },
+      { x: 1, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 }
+    ])
+  })
+
+  it('detectFormat recognizes a project file (an object with a strips array)', () => {
+    expect(detectFormat(JSON.stringify({ version: 1, strips: [] })).kind).toBe('project')
+  })
+
+  it('detectFormat reports an error for malformed JSON', () => {
+    expect(detectFormat('[[0,0]').kind).toBe('error')
+  })
+
+  it('detectFormat reports an error for an array of non-coordinate entries', () => {
+    expect(detectFormat('[1,2,3]').kind).toBe('error')
+  })
+
+  it('detectFormat reports "empty" for blank input', () => {
+    expect(detectFormat('   ').kind).toBe('empty')
+  })
+})
+
+describe('core/import: fitPointsToWorld', () => {
+  it('fits (contain, keep aspect) and centers into the world box', () => {
+    const points = [
+      { x: 0, y: 0, z: 0 },
+      { x: 100, y: 50, z: 0 }
+    ]
+    const world = { x: 0, y: 0, size: 200 }
+    // bbox 100x50 (centre 50,25); contain into 200x200 picks the limiting
+    // axis (100-wide) -> scale 2; world box centre is (100,100).
+    const fitted = fitPointsToWorld(points, world)
+    expect(fitted[0]).toEqual({ x: 0, y: 50, z: 0 })
+    expect(fitted[1]).toEqual({ x: 200, y: 150, z: 0 })
+  })
+
+  it('returns an empty array for no points', () => {
+    expect(fitPointsToWorld([], { x: 0, y: 0, size: 100 })).toEqual([])
+  })
+})
+
+describe('state/persist: serialize/deserialize round-trip', () => {
+  it('keeps the project fields at the top level and splits the image data back out', () => {
+    const projectData = { version: 1, units: 'mm', strips: [{ id: 'a' }] }
+    const imageSrcData = { dataUrl: 'data:image/png;base64,xx', naturalW: 10, naturalH: 20, name: 'photo.png' }
+    const record = serializeProject(projectData, imageSrcData)
+    expect(record.version).toBe(1)
+    expect(record.strips).toEqual([{ id: 'a' }])
+    expect(typeof record.savedAt).toBe('number')
+    expect(record.imageData).toEqual(imageSrcData)
+
+    const result = deserializeProject(record)
+    expect(result.project).toEqual(projectData)
+    expect(result.imageData).toEqual(imageSrcData)
+    expect(result.savedAt).toBe(record.savedAt)
+  })
+
+  it('imageData is null when there is no reference image', () => {
+    const record = serializeProject({ version: 1, strips: [] }, { dataUrl: null })
+    expect(record.imageData).toBeNull()
+  })
+})
+
+describe('core/throttle: autosave trailing throttle', () => {
+  it('saves immediately on the first change', () => {
+    const result = throttleOnChange(initThrottleState(), 1000, 5000)
+    expect(result.action).toBe('save')
+    expect(result.state).toEqual({ lastSavedAt: 1000, dueAt: null })
+  })
+
+  it('later changes inside the window schedule one trailing save instead of another immediate one', () => {
+    let state = throttleOnChange(initThrottleState(), 1000, 5000).state
+    const r1 = throttleOnChange(state, 2000, 5000)
+    expect(r1.action).toBe('wait')
+    expect(r1.state.dueAt).toBe(6000)
+    const r2 = throttleOnChange(r1.state, 3000, 5000) // folds into the same trailing save
+    expect(r2.action).toBe('wait')
+    expect(r2.state.dueAt).toBe(6000)
+  })
+
+  it('checkDue only fires once the trailing save time has passed', () => {
+    let state = throttleOnChange(initThrottleState(), 1000, 5000).state
+    state = throttleOnChange(state, 2000, 5000).state // dueAt = 6000
+    expect(checkDue(state, 5999).action).toBe('wait')
+    const fired = checkDue(state, 6000)
+    expect(fired.action).toBe('save')
+    expect(fired.state).toEqual({ lastSavedAt: 6000, dueAt: null })
+  })
+
+  it('a change after the interval has fully elapsed saves immediately again', () => {
+    const state = throttleOnChange(initThrottleState(), 1000, 5000).state
+    expect(throttleOnChange(state, 6500, 5000).action).toBe('save')
+  })
+})
+
+describe('state/history: undo/redo', () => {
+  beforeEach(() => {
+    project.strips.splice(0, project.strips.length)
+    clearSelection()
+    resetHistory()
+  })
+
+  it('commit() pushes a snapshot; undo restores the prior state, redo reapplies it', () => {
+    project.strips.push(newStrip('line', { name: 'A', geom: { p0: { x: 0, y: 0 }, angle: 0 } }))
+    commit()
+    expect(canUndo()).toBe(true)
+    expect(canRedo()).toBe(false)
+
+    project.strips.push(newStrip('line', { name: 'B', geom: { p0: { x: 50, y: 0 }, angle: 0 } }))
+    commit()
+    expect(project.strips.length).toBe(2)
+
+    undo()
+    expect(project.strips.length).toBe(1)
+    expect(project.strips[0].name).toBe('A')
+    expect(canRedo()).toBe(true)
+
+    redo()
+    expect(project.strips.length).toBe(2)
+    expect(project.strips[1].name).toBe('B')
+  })
+
+  it('a new commit after an undo clears the redo stack', () => {
+    project.strips.push(newStrip('line', { name: 'A' }))
+    commit()
+    project.strips.push(newStrip('line', { name: 'B' }))
+    commit()
+    undo()
+    expect(canRedo()).toBe(true)
+    project.strips.push(newStrip('line', { name: 'C' }))
+    commit()
+    expect(canRedo()).toBe(false)
+  })
+
+  it('restoring a snapshot drops selection ids for strips that no longer exist', () => {
+    const a = newStrip('line', { name: 'A' })
+    project.strips.push(a)
+    commit()
+    selectStrips([a.id])
+
+    const b = newStrip('line', { name: 'B' })
+    project.strips.push(b)
+    commit()
+    selectStrips([a.id, b.id])
+
+    undo() // back to just [a] -- b.id is no longer a valid selection
+    expect(selection.ids).toEqual([a.id])
+  })
+
+  it('beginDrag/commitDrag push one entry per gesture, and commitDrag is a no-op when nothing changed', () => {
+    const a = newStrip('line', { name: 'A', geom: { p0: { x: 0, y: 0 }, angle: 0 } })
+    project.strips.push(a)
+    commit()
+    resetHistory() // clean slate for the assertions below
+
+    beginDrag()
+    commitDrag() // nothing mutated since beginDrag() -- no-op
+    expect(canUndo()).toBe(false)
+
+    beginDrag()
+    a.geom = { ...a.geom, p0: { x: 10, y: 10 } }
+    commitDrag()
+    expect(canUndo()).toBe(true)
+
+    undo()
+    expect(project.strips[0].geom.p0).toEqual({ x: 0, y: 0 })
   })
 })
