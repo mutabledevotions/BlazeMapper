@@ -14,8 +14,36 @@ import {
 } from '../core/geometry/index.js'
 import { stripsBbox } from '../core/layout.js'
 import { convert } from '../core/units.js'
+import { fitToBox, calibrateScale, convertImageUnits } from '../core/image.js'
 
 export const project = $state(newProject())
+
+// Reference image source data (data URL + natural size + file name) lives
+// outside the project on purpose: it's the one thing that would make undo
+// snapshots (phase 4, structuredClone of `project`) heavy, since a photo's
+// data URL can be megabytes. Only the transform (project.image) is "layout".
+export const imageSrc = $state({ dataUrl: null, naturalW: 0, naturalH: 0, name: '' })
+
+// Two-point scale calibration. active: a "Calibrate scale" click is in
+// progress; points: the canvas clicks collected so far (0-2, world units).
+// At 2 points, ImagePanel shows the real-distance form; Esc or the panel's
+// Cancel button abandon it via cancelCalibration().
+export const calibration = $state({ active: false, points: [] })
+
+export function startCalibration() {
+  calibration.active = true
+  calibration.points = []
+}
+
+export function addCalibrationPoint(pt) {
+  if (!calibration.active || calibration.points.length >= 2) return
+  calibration.points = [...calibration.points, pt]
+}
+
+export function cancelCalibration() {
+  calibration.active = false
+  calibration.points = []
+}
 
 // Multi-select: ids is the full selected set, primary is the one Strip properties
 // edits (and the one Handles are drawn for, when ids.length === 1).
@@ -354,6 +382,12 @@ export function setUnits(units) {
   project.world.x = round3(project.world.x * k)
   project.world.y = round3(project.world.y * k)
   project.world.size = round3(project.world.size * k)
+  if (project.image) {
+    const converted = convertImageUnits(project.image, k)
+    project.image.x = round3(converted.x)
+    project.image.y = round3(converted.y)
+    project.image.scale = round3(converted.scale)
+  }
   project.units = units
 }
 
@@ -386,4 +420,60 @@ export function moveWorldOrigin(dx, dy) {
 // Bottom-right corner handle: resizes with the top-left (x, y) fixed.
 export function resizeWorld(size) {
   project.world.size = Math.max(1e-6, size)
+}
+
+// --- Reference image ---------------------------------------------------
+// project.image is the layout transform (saved with the project); imageSrc
+// (above) is the actual pixel data, kept separate so it stays out of undo
+// snapshots. loadImage reads the file, measures its natural size via an
+// offscreen Image(), then fits it into the current world box (Contain,
+// centred) at 50% opacity, unlocked and visible.
+export function loadImage(file) {
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const dataUrl = reader.result
+    const probe = new Image()
+    probe.onload = () => {
+      imageSrc.dataUrl = dataUrl
+      imageSrc.naturalW = probe.naturalWidth
+      imageSrc.naturalH = probe.naturalHeight
+      imageSrc.name = file.name
+      const fit = fitToBox(probe.naturalWidth, probe.naturalHeight, project.world)
+      project.image = {
+        x: fit.x,
+        y: fit.y,
+        scale: fit.scale,
+        rotation: 0,
+        opacity: 0.5,
+        locked: false,
+        visible: true
+      }
+    }
+    probe.src = dataUrl
+  }
+  reader.readAsDataURL(file)
+}
+
+export function updateImage(patch) {
+  if (!project.image) return
+  Object.assign(project.image, patch)
+}
+
+export function removeImage() {
+  project.image = null
+  imageSrc.dataUrl = null
+  imageSrc.naturalW = 0
+  imageSrc.naturalH = 0
+  imageSrc.name = ''
+  cancelCalibration()
+}
+
+// Two-point calibration: scales the image about its own centre so |p1-p2|
+// becomes realDistance, keeping the midpoint of p1/p2 fixed in world space.
+// No-op if the image is missing, points coincide, or realDistance isn't > 0.
+export function calibrateImage(p1, p2, realDistance) {
+  if (!project.image) return
+  const result = calibrateScale(project.image, p1, p2, realDistance)
+  if (result) Object.assign(project.image, result)
 }

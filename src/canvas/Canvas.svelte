@@ -10,6 +10,8 @@
     keys,
     ui,
     toolState,
+    imageSrc,
+    calibration,
     setDragMode,
     setView,
     selectStrip,
@@ -27,14 +29,20 @@
     moveHandle,
     toggleSnap,
     moveWorldOrigin,
-    resizeWorld
+    resizeWorld,
+    updateImage,
+    addCalibrationPoint,
+    cancelCalibration
   } from '../state/project.svelte.js'
   import { projectBbox, stripsBbox } from '../core/layout.js'
   import { sample as geomSample } from '../core/geometry/index.js'
   import { gridStep } from '../core/model.js'
+  import { imageBbox } from '../core/image.js'
+  import { quantizeAngle } from '../core/geometry/line.js'
   import Grid from './Grid.svelte'
   import StripView from './StripView.svelte'
   import Handles from './Handles.svelte'
+  import RefImage from './RefImage.svelte'
   import { convert } from '../core/units.js'
 
   let svgEl
@@ -46,6 +54,9 @@
   let worldResizeState = null
   let rotateState = null // { center, startAngle, lastDeg }
   let resizeState = null // { anchor, startDist, lastK }
+  let imageDragState = null // { startWorld, lastDx, lastDy }
+  let imageScaleState = null // { startDist, lastK }
+  let imageRotateState = null // { center, startAngle, lastDeg }
   // World-space position of the handle currently being dragged, for the small
   // "15°" / "LED count" modifier badges -- null when nothing is being dragged.
   let dragHandlePos = $state(null)
@@ -99,15 +110,26 @@
   // Union of the world box and every strip's bbox -- the space pan/zoom are bounded to.
   function unionBox() {
     const w = project.world
-    const rect = { minX: w.x, minY: w.y, maxX: w.x + w.size, maxY: w.y + w.size }
+    let box = { minX: w.x, minY: w.y, maxX: w.x + w.size, maxY: w.y + w.size }
     const pb = projectBbox(project)
-    if (!pb) return rect
-    return {
-      minX: Math.min(rect.minX, pb.minX),
-      minY: Math.min(rect.minY, pb.minY),
-      maxX: Math.max(rect.maxX, pb.maxX),
-      maxY: Math.max(rect.maxY, pb.maxY)
+    if (pb) {
+      box = {
+        minX: Math.min(box.minX, pb.minX),
+        minY: Math.min(box.minY, pb.minY),
+        maxX: Math.max(box.maxX, pb.maxX),
+        maxY: Math.max(box.maxY, pb.maxY)
+      }
     }
+    if (project.image && project.image.visible && imageSrc.naturalW > 0) {
+      const ib = imageBbox(project.image, imageSrc.naturalW, imageSrc.naturalH)
+      box = {
+        minX: Math.min(box.minX, ib.minX),
+        minY: Math.min(box.minY, ib.minY),
+        maxX: Math.max(box.maxX, ib.maxX),
+        maxY: Math.max(box.maxY, ib.maxY)
+      }
+    }
+    return box
   }
 
   function minPitch() {
@@ -261,6 +283,42 @@
       rotateHandlePos = pt
       return
     }
+    if (imageDragState) {
+      const world = screenToWorld(evt)
+      const dx = snap(world.x - imageDragState.startWorld.x, project.world.x)
+      const dy = snap(world.y - imageDragState.startWorld.y, project.world.y)
+      if (dx !== imageDragState.lastDx || dy !== imageDragState.lastDy) {
+        updateImage({
+          x: project.image.x + (dx - imageDragState.lastDx),
+          y: project.image.y + (dy - imageDragState.lastDy)
+        })
+        imageDragState.lastDx = dx
+        imageDragState.lastDy = dy
+      }
+      return
+    }
+    if (imageScaleState) {
+      const pt = screenToWorld(evt)
+      const dist = Math.hypot(pt.x - project.image.x, pt.y - project.image.y)
+      const k = dist / imageScaleState.startDist
+      if (k > 0 && Math.abs(k - imageScaleState.lastK) > 1e-9) {
+        updateImage({ scale: Math.max(1e-6, project.image.scale * (k / imageScaleState.lastK)) })
+        imageScaleState.lastK = k
+      }
+      return
+    }
+    if (imageRotateState) {
+      const pt = screenToWorld(evt)
+      const angle =
+        (Math.atan2(pt.y - imageRotateState.center.y, pt.x - imageRotateState.center.x) * 180) / Math.PI
+      const step = evt.shiftKey ? 15 : 0.5
+      let delta = Math.round((angle - imageRotateState.startAngle) / step) * step
+      if (delta !== imageRotateState.lastDeg) {
+        updateImage({ rotation: quantizeAngle(project.image.rotation + (delta - imageRotateState.lastDeg)) })
+        imageRotateState.lastDeg = delta
+      }
+      return
+    }
     if (resizeState) {
       const pt = screenToWorld(evt)
       const sx = snap(pt.x, project.world.x)
@@ -340,6 +398,18 @@
       svgEl.releasePointerCapture(evt.pointerId)
       dragState = null
     }
+    if (imageDragState) {
+      imageDragState = null
+      svgEl.releasePointerCapture(evt.pointerId)
+    }
+    if (imageScaleState) {
+      imageScaleState = null
+      svgEl.releasePointerCapture(evt.pointerId)
+    }
+    if (imageRotateState) {
+      imageRotateState = null
+      svgEl.releasePointerCapture(evt.pointerId)
+    }
     dragHandlePos = null
     setDragMode(null)
   }
@@ -402,6 +472,52 @@
     svgEl.setPointerCapture(evt.pointerId)
   }
 
+  // Reference image: body drag, corner scale (about centre), corner-45deg
+  // rotate -- same start/move/release pattern as the world box and the group
+  // resize/rotate handles above. stopPropagation so an unlocked image drag
+  // doesn't also start a marquee.
+  function startImageDrag(evt) {
+    evt.stopPropagation()
+    if (!project.image || project.image.locked) return
+    imageDragState = { startWorld: screenToWorld(evt), lastDx: 0, lastDy: 0 }
+    svgEl.setPointerCapture(evt.pointerId)
+  }
+
+  function startImageScale(evt) {
+    evt.stopPropagation()
+    if (!project.image) return
+    const start = screenToWorld(evt)
+    const startDist = Math.hypot(start.x - project.image.x, start.y - project.image.y) || 1
+    imageScaleState = { startDist, lastK: 1 }
+    svgEl.setPointerCapture(evt.pointerId)
+  }
+
+  function startImageRotate(evt) {
+    evt.stopPropagation()
+    if (!project.image) return
+    const center = { x: project.image.x, y: project.image.y }
+    const start = screenToWorld(evt)
+    const startAngle = (Math.atan2(start.y - center.y, start.x - center.x) * 180) / Math.PI
+    imageRotateState = { center, startAngle, lastDeg: 0 }
+    svgEl.setPointerCapture(evt.pointerId)
+  }
+
+  // Calibration overlay click: button !== 0 or Space held means the user is
+  // trying to pan/middle-drag through calibration mode, so defer to the
+  // normal pointerdown handler instead of eating the click as a calibration
+  // point. Otherwise, each of the first two clicks becomes a calibration
+  // point; once 2 are collected, ImagePanel shows the real-distance form and
+  // further clicks are ignored until it's confirmed or cancelled.
+  function onCalibrationClick(evt) {
+    if (evt.button !== 0 || keys.space) {
+      onPointerDown(evt)
+      return
+    }
+    evt.stopPropagation()
+    if (calibration.points.length >= 2) return
+    addCalibrationPoint(screenToWorld(evt))
+  }
+
   const CORNER_OPPOSITE = { tl: 'br', tr: 'bl', bl: 'tr', br: 'tl' }
 
   // Corner resize handle (shown on the selection bbox for 1+ selected strips).
@@ -440,9 +556,21 @@
     if (evt.code === 'Space') {
       evt.preventDefault()
     }
+    if (evt.key === 'Escape') {
+      // Calibration takes priority over the ordinary Esc-clears-selection
+      // behaviour, since it's a modal-ish mode the user needs an easy way out of.
+      if (calibration.active) {
+        cancelCalibration()
+        return
+      }
+      clearSelection()
+      return
+    }
     if (evt.key === 's' || evt.key === 'S') toggleSnap()
     if (evt.key === 'f' || evt.key === 'F') fitView()
-    if (evt.key === 'Escape') clearSelection()
+    if ((evt.key === 'i' || evt.key === 'I') && project.image) {
+      updateImage({ locked: !project.image.locked })
+    }
     if (evt.key === 'Delete' || evt.key === 'Backspace') {
       if (selection.ids.length) {
         evt.preventDefault()
@@ -502,6 +630,18 @@
   <rect x={viewBox.x - 10000} y={viewBox.y - 10000} width="20000" height="20000" fill="var(--canvas-bg)" />
   {#if project.grid.show}
     <Grid {viewBox} size={gridStep(project)} originX={project.world.x} originY={project.world.y} />
+  {/if}
+  {#if project.image}
+    <RefImage
+      image={project.image}
+      dataUrl={imageSrc.dataUrl}
+      naturalW={imageSrc.naturalW}
+      naturalH={imageSrc.naturalH}
+      {px}
+      onBodyDown={startImageDrag}
+      onScaleDown={startImageScale}
+      onRotateDown={startImageRotate}
+    />
   {/if}
   <rect
     class="world-box"
@@ -615,6 +755,31 @@
       vector-effect="non-scaling-stroke"
     />
   {/if}
+
+  {#if calibration.active}
+    <rect
+      class="calib-overlay"
+      x={viewBox.x - 10000}
+      y={viewBox.y - 10000}
+      width="20000"
+      height="20000"
+      fill="transparent"
+      onpointerdown={onCalibrationClick}
+    />
+    {#each calibration.points as p, i (i)}
+      <circle class="calib-marker" cx={p.x} cy={p.y} r={5 * px} />
+    {/each}
+    {#if calibration.points.length === 2}
+      <line
+        class="calib-line"
+        x1={calibration.points[0].x}
+        y1={calibration.points[0].y}
+        x2={calibration.points[1].x}
+        y2={calibration.points[1].y}
+        vector-effect="non-scaling-stroke"
+      />
+    {/if}
+  {/if}
 </svg>
 
 <style>
@@ -683,6 +848,19 @@
     fill: color-mix(in srgb, var(--accent) 14%, transparent);
     stroke: var(--accent);
     stroke-width: 1;
+    stroke-dasharray: 4 3;
+  }
+  .calib-overlay {
+    cursor: crosshair;
+  }
+  .calib-marker {
+    fill: var(--accent);
+    stroke: #222;
+    stroke-width: 0.5;
+  }
+  .calib-line {
+    stroke: var(--accent);
+    stroke-width: 1.5;
     stroke-dasharray: 4 3;
   }
 </style>

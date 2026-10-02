@@ -4,6 +4,7 @@ import { sample, handles, moveHandle, translate, scale, bbox, rotate, mirror, sc
 import { computePixels, projectBbox } from '../src/core/layout.js'
 import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
+import { fitToBox, calibrateScale, imageCorners, imageBbox, convertImageUnits } from '../src/core/image.js'
 import {
   project,
   selection,
@@ -378,6 +379,90 @@ describe('store: scaleSelected locked vs unlocked pitch scaling', () => {
     selectStrips([s.id])
     scaleSelected(2, { x: 0, y: 0 }, false)
     expect(project.strips[0].geom.p0).toEqual({ x: 10, y: 0 })
+  })
+})
+
+describe('core/image: fitToBox', () => {
+  it('contains the image centred in a square world box, picking the limiting axis', () => {
+    // 2000x1000 image into a 2000x2000 box: height is the limiting axis (scale 2),
+    // width would need scale 1 -- Contain picks the smaller (2 vs 1) -> 1.
+    const fit = fitToBox(2000, 1000, { x: 0, y: 0, size: 2000 })
+    expect(fit.scale).toBe(1)
+    expect(fit.x).toBe(1000)
+    expect(fit.y).toBe(1000)
+  })
+
+  it('picks the width-limited scale when the image is tall and narrow', () => {
+    const fit = fitToBox(1000, 2000, { x: 0, y: 0, size: 2000 })
+    expect(fit.scale).toBe(1)
+  })
+
+  it('centres on the world box origin, not just (0,0)', () => {
+    const fit = fitToBox(1000, 1000, { x: 500, y: 500, size: 1000 })
+    expect(fit).toEqual({ x: 1000, y: 1000, scale: 1 })
+  })
+})
+
+describe('core/image: calibrateScale', () => {
+  it('scales so |p1-p2| becomes realDistance, keeping their midpoint fixed', () => {
+    const image = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true }
+    // Two points 10 world units apart, midpoint (5, 0); real distance is 50 -> k = 5.
+    const result = calibrateScale(image, { x: 0, y: 0 }, { x: 10, y: 0 }, 50)
+    expect(result.scale).toBe(5)
+    // Image centre (0,0) scales away from anchor (5,0) by k=5: 5 + (0-5)*5 = -20.
+    expect(result.x).toBeCloseTo(-20)
+    expect(result.y).toBeCloseTo(0)
+  })
+
+  it('keeps the midpoint itself fixed under the same transform', () => {
+    const image = { x: 5, y: 0, scale: 1, rotation: 0, opacity: 0.5, locked: false, visible: true }
+    // Image centre already at the midpoint -- scaling about it leaves it put.
+    const result = calibrateScale(image, { x: 0, y: 0 }, { x: 10, y: 0 }, 20)
+    expect(result.x).toBeCloseTo(5)
+    expect(result.y).toBeCloseTo(0)
+    expect(result.scale).toBe(2)
+  })
+
+  it('returns null when the two points coincide', () => {
+    const image = { x: 0, y: 0, scale: 1, rotation: 0 }
+    expect(calibrateScale(image, { x: 3, y: 3 }, { x: 3, y: 3 }, 50)).toBeNull()
+  })
+
+  it('returns null for a non-positive real distance', () => {
+    const image = { x: 0, y: 0, scale: 1, rotation: 0 }
+    expect(calibrateScale(image, { x: 0, y: 0 }, { x: 10, y: 0 }, 0)).toBeNull()
+  })
+})
+
+describe('core/image: corners, bbox, unit conversion', () => {
+  it('unrotated corners are the axis-aligned half-extents around the centre', () => {
+    const image = { x: 100, y: 100, scale: 2, rotation: 0 }
+    // naturalW=10, naturalH=20 -> world w=20, h=40 -> half-extents 10, 20
+    const corners = imageCorners(image, 10, 20)
+    expect(corners).toEqual([
+      { x: 90, y: 80 },
+      { x: 110, y: 80 },
+      { x: 110, y: 120 },
+      { x: 90, y: 120 }
+    ])
+  })
+
+  it('a 90 degree rotation swaps the bbox width/height', () => {
+    const image = { x: 0, y: 0, scale: 1, rotation: 90 }
+    const bbox = imageBbox(image, 100, 40) // world 100x40, rotated 90 -> bbox 40x100
+    expect(bbox.maxX - bbox.minX).toBeCloseTo(40)
+    expect(bbox.maxY - bbox.minY).toBeCloseTo(100)
+  })
+
+  it('an unrotated bbox matches the plain half-extents', () => {
+    const image = { x: 5, y: -5, scale: 1, rotation: 0 }
+    const bbox = imageBbox(image, 10, 10)
+    expect(bbox).toEqual({ minX: 0, minY: -10, maxX: 10, maxY: 0 })
+  })
+
+  it('convertImageUnits scales x, y, and scale by the same factor', () => {
+    const image = { x: 100, y: 50, scale: 2 }
+    expect(convertImageUnits(image, 0.5)).toEqual({ x: 50, y: 25, scale: 1 })
   })
 })
 

@@ -34,6 +34,7 @@ This list mirrors the `HOTKEYS` table in `src/state/hotkeys.js`, which also back
 - `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
 - With 1+ strips selected, drag a corner handle on the dashed selection bbox to uniform-scale it anchored at the opposite corner; the toolbar's "Lock pitch" toggle (default on) picks locked (positions move, strip size/pitch/LED count stay fixed) vs. unlocked (full geometric scale, pitch scales too).
 - With 2+ strips selected, drag the handle above the dashed group bbox to rotate the whole selection about its center (0.5° steps, `Shift` = 15°). Locked strips are skipped by every transform above.
+- `I` — toggle the reference image's lock. Ignored while typing in a field, and a no-op with no image loaded.
 
 ## Pixelblaze map facts this tool relies on
 
@@ -84,8 +85,17 @@ This list mirrors the `HOTKEYS` table in `src/state/hotkeys.js`, which also back
 - **Hotkey hints.** `src/state/hotkeys.js` is the single table backing both this README's hotkey list and the toolbar's right-aligned, context-sensitive hint line (idle / selection / end-handle drag / group-resize drag / hidden while typing).
 - **Strip properties readout.** X/Y (relative to the world origin, in project units, editable) and Angle (single-strip only), plus nudge buttons (`← → ↑ ↓` move by one grid step, `Shift` = 10x, `Alt` = 1/10; `⟲ ⟳` rotate 0.5°, `Shift` = 15°). With a multi-selection the readout shows the group bbox origin and the nudges move/rotate the whole selection.
 
+## Phase 3 (this build)
+
+- **Reference image.** `project.image = { x, y, scale, rotation, opacity, locked, visible }` (x/y = image centre, scale = world units per source pixel) is the saved layout transform; the actual pixel data (`dataUrl`, natural size, file name) lives in a separate, non-project `imageSrc` so it stays out of the project and future undo snapshots. ImagePanel (left sidebar, under Strip properties) loads a file via `<input type="file" accept="image/*">`, then fits it into the world box (Contain, centred) at 50% opacity, unlocked and visible.
+- **Canvas rendering and handles (`src/canvas/RefImage.svelte`).** Rendered above the grid, below the world box and strips. Unlocked and visible: dragging the image body moves it (grid snap applies, `Alt` inverts it, same as strips); a corner handle scales it uniformly about its own centre; a handle protruding from that same corner at 45° rotates it (0.5° steps, `Shift` = 15°). Locked: the image has no pointer events at all, so clicks fall through to strips, the world box, and the marquee.
+- **Two-point calibration.** ImagePanel's "Calibrate scale" button arms calibration mode; the next two canvas clicks (anywhere, `Esc` cancels) drop markers and a connecting line, then ImagePanel's inline form asks for the real-world distance between them. `calibrateScale()` (`src/core/image.js`) scales the image about its own centre so that distance becomes real, while the midpoint of the two clicks stays fixed in world space. The toolbar's hint line shows "Click two points a known distance apart · Esc: cancel" while calibration is active.
+- **Pan/zoom union box** now includes the image's (possibly rotated) bounding box when it's visible, so `F` (fit) and the pan/zoom clamp account for it like they do the world box and every strip.
+- **Not part of the export.** `project.image` is layout metadata for this editor only -- `toMapJSON`/`computePixels` never see it, so the image has no effect on the Pixelblaze map.
+- **`setUnits` converts the image too** (x, y, scale), same as it does the world box and every strip's geometry and pitch.
+- Pure math (`fitToBox`, `calibrateScale`, `imageCorners`/`imageBbox`, `convertImageUnits`) lives in `src/core/image.js`, unit-tested in isolation from the Svelte/DOM/file-reading code that uses it.
+
 ## Roadmap
 
-3. **Reference image.** Load a photo or drawing underneath the canvas, move/rotate/scale it, lock it, and calibrate its scale with a two-point real-world distance click.
 4. **History, persistence, import.** Undo/redo, localStorage autosave, save/load project files, paste-in import of an existing Pixelblaze map (relaxed JSON and JS generator functions), and a wiring preview that animates the chase order.
 5. **Curves and shapes.** Bezier, arc, circle, and polygon geometries, all through the same geometry registry used by line.

@@ -21,7 +21,8 @@ export const HOTKEYS = [
   { keys: 'Arrow keys', desc: 'Nudge the selection by one grid step (Shift = 10x, Alt = 1/10)' },
   { keys: 'Shift (hold on end handle)', desc: 'Snaps the angle to 15° steps' },
   { keys: 'Ctrl/Cmd (hold on end handle)', desc: 'Also resizes LED count from drag distance' },
-  { keys: 'Group/corner resize handle', desc: "Uniform scale anchored at the opposite corner; 'Lock pitch' picks the mode" }
+  { keys: 'Group/corner resize handle', desc: "Uniform scale anchored at the opposite corner; 'Lock pitch' picks the mode" },
+  { keys: 'I', desc: 'Toggle the reference image lock' }
 ]
 
 // One muted line at the right end of the toolbar. Hidden while typing in a
@@ -32,6 +33,7 @@ export const CONTEXT_HINTS = {
   selection: 'Drag: move · ⌘D: duplicate · [ ]: rotate 90° · Del: delete · Esc: deselect',
   endHandleDrag: 'Shift: 15° · ⌘/Ctrl: change LED count · Alt: invert snap',
   groupResizeDrag: 'Lock pitch: on/off',
+  calibrate: 'Click two points a known distance apart · Esc: cancel',
   typing: ''
 }
 

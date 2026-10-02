@@ -5,6 +5,7 @@
     keys,
     ui,
     toolState,
+    calibration,
     setGrid,
     setUnits,
     toggleSnap,
@@ -31,6 +32,7 @@
 
   const hintText = $derived.by(() => {
     if (ui.typing) return ''
+    if (calibration.active) return contextHint('calibrate')
     if (ui.dragMode === 'endHandle') return contextHint('endHandleDrag')
     if (ui.dragMode === 'groupResize') return contextHint('groupResizeDrag')
     return hasSelection ? contextHint('selection') : contextHint('idle')
@@ -52,7 +54,7 @@
     onclick={toggleSnap}
   >
     Snap {effectiveSnap ? 'on' : 'off'}
-    {#if keys.alt}<span class="key-badge">Alt</span>{/if}
+    <span class="key-badge" class:active={keys.alt}>Alt</span>
   </button>
 
   <label class="chk">
@@ -75,94 +77,99 @@
   </label>
   <span class="grid-step">({+gridStep(project).toFixed(3)} {project.units}/div)</span>
 
-  <span class="sep"></span>
+  <!-- World + translate controls, plus the hint line: grouped so the whole
+       thing drops to its own toolbar row (not item-by-item) once the window
+       gets narrow -- see the media query below. At full width this is
+       `display: contents`, so it's invisible to layout and these read as
+       ordinary toolbar items, identical to before this group existed. -->
+  <div class="world-translate-row">
+    <div class="world-fields">
+      <span class="label-row world-title">
+        World
+        <Help
+          text="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage. Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it."
+        />
+      </span>
+      <label class="num">
+        X
+        <input
+          type="number"
+          value={project.world.x}
+          onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
+        />
+      </label>
+      <label class="num">
+        Y
+        <input
+          type="number"
+          value={project.world.y}
+          onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
+        />
+      </label>
+      <label class="num">
+        Size
+        <input
+          type="number"
+          min="0.001"
+          value={project.world.size}
+          onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
+        />
+      </label>
+      <span class="units-suffix">{project.units}</span>
+    </div>
 
-  <div class="world-fields">
-    <span class="label-row world-title">
-      World
-      <Help
-        text="The square world box strips are mapped against, in project units, e.g. a 2m x 2m costume or a 200m x 20m stage. Drag its border or corner handle on the canvas to move or resize it; press F to fit the view to it."
-      />
-    </span>
     <label class="num">
-      X
-      <input
-        type="number"
-        value={project.world.x}
-        onchange={(e) => setWorld({ x: parseFloat(e.target.value) || 0 })}
-      />
+      Units
+      <select value={project.units} onchange={(e) => setUnits(e.target.value)}>
+        <option value="mm">mm</option>
+        <option value="in">in</option>
+        <option value="px">px</option>
+      </select>
     </label>
-    <label class="num">
-      Y
-      <input
-        type="number"
-        value={project.world.y}
-        onchange={(e) => setWorld({ y: parseFloat(e.target.value) || 0 })}
-      />
+
+    <span class="sep"></span>
+
+    <button title="Duplicate selection (Ctrl/Cmd+D)" disabled={!hasSelection} onclick={duplicateSelected}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <rect x="2" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
+        <rect x="6" y="2" width="8" height="8" rx="1" fill="var(--panel-bg)" stroke="currentColor" stroke-width="1.3" />
+      </svg>
+    </button>
+    <button title="Mirror horizontally" disabled={!hasSelection} onclick={() => mirrorSelected('h')}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <line x1="8" y1="1" x2="8" y2="15" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
+        <path d="M6 4 L2 8 L6 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M10 4 L14 8 L10 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+    <button title="Mirror vertically" disabled={!hasSelection} onclick={() => mirrorSelected('v')}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
+        <path d="M4 6 L8 2 L12 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M4 10 L8 14 L12 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+    <button title="Rotate 90° left ([)" disabled={!hasSelection} onclick={() => rotateSelectedBy(-90)}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <path d="M12 8A4 4 0 1 1 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M8 1 L8 5 L4.5 3.2 Z" fill="currentColor" />
+      </svg>
+    </button>
+    <button title="Rotate 90° right (])" disabled={!hasSelection} onclick={() => rotateSelectedBy(90)}>
+      <svg viewBox="0 0 16 16" width="15" height="15">
+        <path d="M4 8A4 4 0 1 0 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M8 1 L8 5 L11.5 3.2 Z" fill="currentColor" />
+      </svg>
+    </button>
+
+    <label class="chk">
+      <input type="checkbox" checked={toolState.lockPitch} onchange={(e) => setLockPitch(e.target.checked)} />
+      Lock pitch
+      <Help text="Default on. Locked: positions scale, strip size/pitch/LED count stay fixed. Unlocked: full geometric scale, pitch scales too." />
     </label>
-    <label class="num">
-      Size
-      <input
-        type="number"
-        min="0.001"
-        value={project.world.size}
-        onchange={(e) => setWorld({ size: Math.max(0.001, parseFloat(e.target.value) || 1) })}
-      />
-    </label>
-    <span class="units-suffix">{project.units}</span>
+
+    <span class="hint-line">{hintText}</span>
   </div>
-
-  <label class="num">
-    Units
-    <select value={project.units} onchange={(e) => setUnits(e.target.value)}>
-      <option value="mm">mm</option>
-      <option value="in">in</option>
-      <option value="px">px</option>
-    </select>
-  </label>
-
-  <span class="sep"></span>
-
-  <button title="Duplicate selection (Ctrl/Cmd+D)" disabled={!hasSelection} onclick={duplicateSelected}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <rect x="2" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
-      <rect x="6" y="2" width="8" height="8" rx="1" fill="var(--panel-bg)" stroke="currentColor" stroke-width="1.3" />
-    </svg>
-  </button>
-  <button title="Mirror horizontally" disabled={!hasSelection} onclick={() => mirrorSelected('h')}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <line x1="8" y1="1" x2="8" y2="15" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
-      <path d="M6 4 L2 8 L6 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M10 4 L14 8 L10 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  </button>
-  <button title="Mirror vertically" disabled={!hasSelection} onclick={() => mirrorSelected('v')}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
-      <path d="M4 6 L8 2 L12 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M4 10 L8 14 L12 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  </button>
-  <button title="Rotate 90° left ([)" disabled={!hasSelection} onclick={() => rotateSelectedBy(-90)}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <path d="M12 8A4 4 0 1 1 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
-      <path d="M8 1 L8 5 L4.5 3.2 Z" fill="currentColor" />
-    </svg>
-  </button>
-  <button title="Rotate 90° right (])" disabled={!hasSelection} onclick={() => rotateSelectedBy(90)}>
-    <svg viewBox="0 0 16 16" width="15" height="15">
-      <path d="M4 8A4 4 0 1 0 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
-      <path d="M8 1 L8 5 L11.5 3.2 Z" fill="currentColor" />
-    </svg>
-  </button>
-
-  <label class="chk">
-    <input type="checkbox" checked={toolState.lockPitch} onchange={(e) => setLockPitch(e.target.checked)} />
-    Lock pitch
-    <Help text="Default on. Locked: positions scale, strip size/pitch/LED count stay fixed. Unlocked: full geometric scale, pitch scales too." />
-  </label>
-
-  <span class="hint-line">{hintText}</span>
 </div>
 
 <AddStripsDialog bind:this={stripsDialog} />
@@ -226,6 +233,28 @@
     font-size: 0.78rem;
     padding-bottom: 0.35rem;
   }
+  /* World/units/transform-tool/lock-pitch group, plus the hint line. At full
+     width it's `display: contents` -- transparent to layout, so its children
+     are just more items in the single toolbar row (unchanged from before).
+     Below the breakpoint it becomes a real flex row of its own (flex-basis:
+     100% forces the line break) with a top border to visually separate it
+     from row one. */
+  .world-translate-row {
+    display: contents;
+  }
+  @media (max-width: 1150px) {
+    .world-translate-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      flex-basis: 100%;
+      width: 100%;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+  }
   button {
     background: var(--accent);
     color: #0b0d10;
@@ -257,17 +286,31 @@
     border-color: var(--accent);
   }
   .key-badge {
-    background: var(--accent);
-    color: #0b0d10;
+    /* Always rendered (not conditionally mounted) so the button's width never
+       shifts when Alt is pressed or released -- only its color does. */
+    background: var(--border);
+    color: var(--muted);
     border-radius: 999px;
     padding: 0.05rem 0.4rem;
     font-size: 0.68rem;
     font-weight: 700;
   }
+  .key-badge.active {
+    background: var(--accent);
+    color: #0b0d10;
+  }
   .hint-line {
+    /* Fixed footprint (not just margin-left: auto) so the line's box never
+       collapses or grows as hintText changes (including to '' while typing) --
+       that would otherwise shift every other toolbar item that wraps near it. */
     margin-left: auto;
+    width: 26rem;
+    flex-shrink: 0;
     color: var(--muted);
     font-size: 0.78rem;
+    text-align: right;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>
