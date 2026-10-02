@@ -47,6 +47,18 @@ export function rotate(geom, deg, center) {
   return impl(geom).rotate(geom, deg, center)
 }
 
+// Mirrors the geometry about `center`. axis: 'h' (flip x) or 'v' (flip y).
+export function mirror(geom, axis, center) {
+  return impl(geom).mirror(geom, axis, center)
+}
+
+// Full geometric scale anchored at `center` -- the unlocked group-resize mode.
+// Locked-pitch resize is handled in the store (it only moves each strip's
+// origin and leaves pitch/ledCount/angle alone), so it doesn't go through here.
+export function scaleAbout(geom, k, center) {
+  return impl(geom).scaleAbout(geom, k, center)
+}
+
 export function registerGeometry(type, implementation) {
   REGISTRY[type] = implementation
 }

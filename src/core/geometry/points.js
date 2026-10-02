@@ -44,6 +44,25 @@ export function rotate(geom, deg, center) {
   }
 }
 
+// Mirrors every point about `center`. axis 'h' flips x, 'v' flips y.
+export function mirror(geom, axis, center) {
+  return {
+    ...geom,
+    pts: geom.pts.map((p) =>
+      axis === 'h' ? { x: center.x * 2 - p.x, y: p.y } : { x: p.x, y: center.y * 2 - p.y }
+    )
+  }
+}
+
+// Full geometric scale anchored at `center`. Points have no pitch of their own,
+// so locked and unlocked group-resize modes behave the same for this geometry.
+export function scaleAbout(geom, k, center) {
+  return {
+    ...geom,
+    pts: geom.pts.map((p) => ({ x: center.x + (p.x - center.x) * k, y: center.y + (p.y - center.y) * k }))
+  }
+}
+
 export function bbox(geom) {
   if (geom.pts.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
   let minX = Infinity

@@ -1,9 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { newProject, newStrip } from '../src/core/model.js'
-import { sample, handles, moveHandle, translate, scale, bbox, rotate } from '../src/core/geometry/index.js'
+import { sample, handles, moveHandle, translate, scale, bbox, rotate, mirror, scaleAbout } from '../src/core/geometry/index.js'
 import { computePixels, projectBbox } from '../src/core/layout.js'
 import { toMapJSON, channelSummary } from '../src/core/export.js'
 import { validateProject } from '../src/core/validate.js'
+import {
+  project,
+  selection,
+  selectStrips,
+  clearSelection,
+  duplicateSelected,
+  scaleSelected
+} from '../src/state/project.svelte.js'
 
 describe('geometry/line', () => {
   it('samples LEDs at pitch spacing along angle 0', () => {
@@ -271,5 +279,145 @@ describe('angle quantization', () => {
     expect(quantizeAngle(12.26)).toBe(12.5)
     expect(quantizeAngle(-90.2)).toBe(270)
     expect(quantizeAngle(720.1)).toBe(0)
+  })
+})
+
+describe('geometry mirror', () => {
+  it('line: horizontal flip negates x about center, keeps y, angle -> 180-angle', () => {
+    const geom = { type: 'line', p0: { x: 10, y: 5 }, angle: 30, p1: null }
+    const next = mirror(geom, 'h', { x: 0, y: 0 })
+    expect(next.p0).toEqual({ x: -10, y: 5 })
+    expect(next.angle).toBe(150)
+  })
+
+  it('line: vertical flip negates y about center, keeps x, angle -> -angle', () => {
+    const geom = { type: 'line', p0: { x: 10, y: 5 }, angle: 30, p1: null }
+    const next = mirror(geom, 'v', { x: 0, y: 0 })
+    expect(next.p0).toEqual({ x: 10, y: -5 })
+    expect(next.angle).toBe(330)
+  })
+
+  it('line fit mode: mirrors p1 along with p0', () => {
+    const geom = { type: 'line', p0: { x: 0, y: 0 }, angle: 0, p1: { x: 40, y: 0 } }
+    const next = mirror(geom, 'h', { x: 20, y: 0 })
+    expect(next.p0).toEqual({ x: 40, y: 0 })
+    expect(next.p1).toEqual({ x: 0, y: 0 })
+  })
+
+  it('points: mirrors every point about the given center', () => {
+    const geom = { type: 'points', pts: [{ x: 0, y: 0 }, { x: 10, y: 10 }] }
+    const h = mirror(geom, 'h', { x: 5, y: 0 })
+    expect(h.pts).toEqual([{ x: 10, y: 0 }, { x: 0, y: 10 }])
+    const v = mirror(geom, 'v', { x: 0, y: 5 })
+    expect(v.pts).toEqual([{ x: 0, y: 10 }, { x: 10, y: 0 }])
+  })
+})
+
+describe('geometry scaleAbout', () => {
+  it('line: scales both p0 and p1 away from the anchor', () => {
+    const geom = { type: 'line', p0: { x: 10, y: 0 }, angle: 0, p1: { x: 20, y: 0 } }
+    const next = scaleAbout(geom, 2, { x: 0, y: 0 })
+    expect(next.p0).toEqual({ x: 20, y: 0 })
+    expect(next.p1).toEqual({ x: 40, y: 0 })
+  })
+
+  it('points: scales every point away from the anchor', () => {
+    const geom = { type: 'points', pts: [{ x: 10, y: 10 }] }
+    const next = scaleAbout(geom, 0.5, { x: 0, y: 0 })
+    expect(next.pts).toEqual([{ x: 5, y: 5 }])
+  })
+})
+
+describe('store: scaleSelected locked vs unlocked pitch scaling', () => {
+  beforeEach(() => {
+    project.strips.splice(0, project.strips.length)
+    clearSelection()
+  })
+
+  it('locked: scales p0 about the anchor but leaves pitch, ledCount, and angle unchanged', () => {
+    const s = newStrip('line', { ledCount: 5, pitch: 10, geom: { p0: { x: 10, y: 0 }, angle: 0 } })
+    project.strips.push(s)
+    selectStrips([s.id])
+    scaleSelected(2, { x: 0, y: 0 }, true)
+    const after = project.strips[0]
+    expect(after.geom.p0).toEqual({ x: 20, y: 0 })
+    expect(after.pitch).toBe(10)
+    expect(after.ledCount).toBe(5)
+    expect(after.geom.angle).toBe(0)
+  })
+
+  it('locked, fit mode: p1 is carried by the same translation as p0, not scaled independently', () => {
+    const s = newStrip('line', {
+      ledCount: 3,
+      pitch: 10,
+      spacing: 'fit',
+      geom: { p0: { x: 10, y: 0 }, angle: 0, p1: { x: 30, y: 0 } }
+    })
+    project.strips.push(s)
+    selectStrips([s.id])
+    scaleSelected(2, { x: 0, y: 0 }, true)
+    const after = project.strips[0]
+    // p0: 10 -> 20 (dx +10); p1 carried by the same +10, not scaled to 60.
+    expect(after.geom.p0).toEqual({ x: 20, y: 0 })
+    expect(after.geom.p1).toEqual({ x: 40, y: 0 })
+  })
+
+  it('unlocked: full geometric scale, and pitch scales too', () => {
+    const s = newStrip('line', { ledCount: 5, pitch: 10, geom: { p0: { x: 10, y: 0 }, angle: 0 } })
+    project.strips.push(s)
+    selectStrips([s.id])
+    scaleSelected(2, { x: 0, y: 0 }, false)
+    const after = project.strips[0]
+    expect(after.geom.p0).toEqual({ x: 20, y: 0 })
+    expect(after.pitch).toBe(20)
+  })
+
+  it('skips locked strips', () => {
+    const s = newStrip('line', { ledCount: 5, pitch: 10, locked: true, geom: { p0: { x: 10, y: 0 }, angle: 0 } })
+    project.strips.push(s)
+    selectStrips([s.id])
+    scaleSelected(2, { x: 0, y: 0 }, false)
+    expect(project.strips[0].geom.p0).toEqual({ x: 10, y: 0 })
+  })
+})
+
+describe('store: duplicateSelected', () => {
+  beforeEach(() => {
+    project.strips.splice(0, project.strips.length)
+    clearSelection()
+    project.grid.divisions = 20
+    project.world = { x: 0, y: 0, size: 2000 }
+  })
+
+  it('clones with new ids, "<name> copy", offset by one grid step, inserted right after the original', () => {
+    const a = newStrip('line', { name: 'Strip 1', geom: { p0: { x: 0, y: 0 }, angle: 0 } })
+    const b = newStrip('line', { name: 'Strip 2', geom: { p0: { x: 100, y: 0 }, angle: 0 } })
+    project.strips.push(a, b)
+    selectStrips([a.id])
+
+    const newIds = duplicateSelected()
+    expect(newIds.length).toBe(1)
+    expect(newIds[0]).not.toBe(a.id)
+
+    const ids = project.strips.map((s) => s.id)
+    expect(ids).toEqual([a.id, newIds[0], b.id])
+
+    const copy = project.strips[1]
+    expect(copy.name).toBe('Strip 1 copy')
+    const step = project.world.size / project.grid.divisions
+    expect(copy.geom.p0).toEqual({ x: step, y: step })
+    expect(selection.ids).toEqual(newIds)
+  })
+
+  it('duplicates every selected strip and skips locked ones', () => {
+    const a = newStrip('line', { name: 'A', geom: { p0: { x: 0, y: 0 }, angle: 0 } })
+    const b = newStrip('line', { name: 'B', locked: true, geom: { p0: { x: 50, y: 0 }, angle: 0 } })
+    project.strips.push(a, b)
+    selectStrips([a.id, b.id])
+
+    const newIds = duplicateSelected()
+    expect(newIds.length).toBe(1)
+    expect(project.strips.length).toBe(3)
+    expect(project.strips.some((s) => s.name === 'B copy')).toBe(false)
   })
 })

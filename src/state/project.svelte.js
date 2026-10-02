@@ -2,14 +2,17 @@
 // No undo/redo yet (phase 4). Keep all mutation behind these actions so
 // history.js can later wrap them without canvas/panel code changing.
 
-import { newProject, newStrip, gridStep } from '../core/model.js'
+import { newProject, newStrip, newId, gridStep } from '../core/model.js'
 import {
   translate as geomTranslate,
   moveHandle as geomMoveHandle,
   scale as geomScale,
   rotate as geomRotate,
+  mirror as geomMirror,
+  scaleAbout as geomScaleAbout,
   sample as geomSample
 } from '../core/geometry/index.js'
+import { stripsBbox } from '../core/layout.js'
 import { convert } from '../core/units.js'
 
 export const project = $state(newProject())
@@ -243,6 +246,86 @@ export function rotateSelected(deg, center) {
     if (!strip || strip.locked) continue
     strip.geom = geomRotate(strip.geom, deg, center)
   }
+}
+
+// Toolbar / hotkey ([, ], nudge buttons) rotate: computes the selection's own
+// bbox centre and reuses rotateSelected, so the handle drag and these entry
+// points always agree on pivot.
+export function rotateSelectedBy(deg) {
+  const strips = project.strips.filter((s) => selection.ids.includes(s.id))
+  const box = stripsBbox(strips)
+  if (!box) return
+  const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
+  rotateSelected(deg, center)
+}
+
+// Duplicate: clones every selected, unlocked strip with a new id and
+// "<name> copy", offset by one grid step, inserted right after its original in
+// list order. Walking the targets from the end means each insertion happens
+// after indices we've already captured, so earlier originals' indices stay valid.
+export function duplicateSelected() {
+  const step = gridStep(project)
+  const targets = project.strips
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => selection.ids.includes(s.id) && !s.locked)
+  const newIds = []
+  for (let k = targets.length - 1; k >= 0; k--) {
+    const { s, i } = targets[k]
+    const copy = structuredClone($state.snapshot(s))
+    copy.id = newId('strip')
+    copy.name = `${s.name} copy`
+    copy.geom = geomTranslate(copy.geom, step, step)
+    project.strips.splice(i + 1, 0, copy)
+    newIds.push(copy.id)
+  }
+  newIds.reverse()
+  if (newIds.length) selectStrips(newIds)
+  return newIds
+}
+
+// Mirror H/V about the selection's own bbox centre. Locked strips are skipped.
+export function mirrorSelected(axis) {
+  const strips = project.strips.filter((s) => selection.ids.includes(s.id) && !s.locked)
+  const box = stripsBbox(strips)
+  if (!box) return
+  const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
+  for (const s of strips) s.geom = geomMirror(s.geom, axis, center)
+}
+
+// Group-resize corner handle (and single-selection resize). k is the
+// *incremental* scale factor to apply this step, anchor is the opposite corner
+// (world units), already fixed for the whole gesture. Locked strips are skipped.
+//
+// lockPitch (default on): positions move but each line strip keeps its own
+// pitch/ledCount/angle -- only p0 scales about the anchor, and in fit mode p1
+// is carried along by the same translation (not scaled independently, so the
+// strip's own length is unchanged). Points strips still scale their point
+// positions since they have no "size" apart from position.
+//
+// unlocked: full geometric scale via the geometry registry, plus pitch *= k so
+// a line strip's on-screen length changes with the drag.
+export function scaleSelected(k, anchor, lockPitch) {
+  for (const id of selection.ids) {
+    const strip = project.strips.find((s) => s.id === id)
+    if (!strip || strip.locked) continue
+    if (strip.geom.type === 'line' && lockPitch) {
+      const p0 = { x: anchor.x + (strip.geom.p0.x - anchor.x) * k, y: anchor.y + (strip.geom.p0.y - anchor.y) * k }
+      const dx = p0.x - strip.geom.p0.x
+      const dy = p0.y - strip.geom.p0.y
+      const next = { ...strip.geom, p0 }
+      if (strip.geom.p1) next.p1 = { x: strip.geom.p1.x + dx, y: strip.geom.p1.y + dy }
+      strip.geom = next
+      continue
+    }
+    strip.geom = geomScaleAbout(strip.geom, k, anchor)
+    if (strip.geom.type === 'line') strip.pitch = strip.pitch * k
+  }
+}
+
+// Arrow-key / nudge-button translate: every selected, unlocked strip by the
+// same delta (translateStrip already skips locked strips).
+export function nudgeSelected(dx, dy) {
+  translateStrips(selection.ids, dx, dy)
 }
 
 // Reorders project.strips (the array order used for export). targetIndex is an

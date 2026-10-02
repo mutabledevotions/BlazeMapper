@@ -3,7 +3,7 @@
   // Drag-and-drop reorders within a channel group or moves a strip into another
   // group (which sets strip.channel). Order within a channel = array order in
   // project.strips; reorderStrip() does the actual array surgery.
-  import { project, selection, selectStrip, toggleSelect, removeStrip, updateStrip, reorderStrip } from '../state/project.svelte.js'
+  import { project, selection, selectStrip, selectStrips, toggleSelect, removeStrip, updateStrip, reorderStrip } from '../state/project.svelte.js'
 
   // Channels in ascending order, each with its strips in current array order.
   const groups = $derived.by(() => {
@@ -14,6 +14,12 @@
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0])
   })
+
+  // Flat displayed order (channel-grouped), used by Shift-click range select.
+  const displayOrder = $derived(groups.flatMap(([, strips]) => strips.map((s) => s.id)))
+
+  // Range-select anchor: the last row clicked plainly or Ctrl/Cmd-toggled.
+  let anchorId = $state(null)
 
   let dragId = $state(null)
 
@@ -72,11 +78,27 @@
     return strip.geom.type === 'points' ? strip.geom.pts.length : strip.ledCount
   }
 
-  // Plain click replaces the selection; Shift/Cmd-click toggles this row into
-  // or out of a multi-selection, matching the canvas's own click behaviour.
+  // Plain click: select this row and set it as the range anchor.
+  // Ctrl/Cmd-click: toggle this row into or out of the selection and move the
+  // anchor here. Shift-click: select the range from the anchor to this row, in
+  // displayed (channel-grouped) order.
   function onRowClick(strip, evt) {
-    if (evt.shiftKey || evt.metaKey) toggleSelect(strip.id)
-    else selectStrip(strip.id)
+    if (evt.shiftKey && anchorId) {
+      const a = displayOrder.indexOf(anchorId)
+      const b = displayOrder.indexOf(strip.id)
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a]
+        selectStrips(displayOrder.slice(lo, hi + 1))
+        return
+      }
+    }
+    if (evt.ctrlKey || evt.metaKey) {
+      toggleSelect(strip.id)
+      anchorId = strip.id
+      return
+    }
+    selectStrip(strip.id)
+    anchorId = strip.id
   }
 </script>
 

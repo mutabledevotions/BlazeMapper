@@ -1,6 +1,21 @@
 <script>
-  import { project, keys, setGrid, setUnits, toggleSnap, setWorld } from '../state/project.svelte.js'
+  import {
+    project,
+    selection,
+    keys,
+    ui,
+    toolState,
+    setGrid,
+    setUnits,
+    toggleSnap,
+    setWorld,
+    setLockPitch,
+    duplicateSelected,
+    mirrorSelected,
+    rotateSelectedBy
+  } from '../state/project.svelte.js'
   import { gridStep } from '../core/model.js'
+  import { contextHint } from '../state/hotkeys.js'
   import AddStripsDialog from './AddStripsDialog.svelte'
   import AddPixelsDialog from './AddPixelsDialog.svelte'
   import Help from './Help.svelte'
@@ -8,9 +23,18 @@
   let stripsDialog
   let pixelsDialog
 
+  const hasSelection = $derived(selection.ids.length > 0)
+
   // Snap button shows the *effective* state (grid.snap XOR Alt held), matching
   // what dragging would actually do right now.
   const effectiveSnap = $derived(project.grid.snap !== keys.alt)
+
+  const hintText = $derived.by(() => {
+    if (ui.typing) return ''
+    if (ui.dragMode === 'endHandle') return contextHint('endHandleDrag')
+    if (ui.dragMode === 'groupResize') return contextHint('groupResizeDrag')
+    return hasSelection ? contextHint('selection') : contextHint('idle')
+  })
 </script>
 
 <div class="toolbar">
@@ -96,6 +120,49 @@
       <option value="px">px</option>
     </select>
   </label>
+
+  <span class="sep"></span>
+
+  <button title="Duplicate selection (Ctrl/Cmd+D)" disabled={!hasSelection} onclick={duplicateSelected}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <rect x="2" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
+      <rect x="6" y="2" width="8" height="8" rx="1" fill="var(--panel-bg)" stroke="currentColor" stroke-width="1.3" />
+    </svg>
+  </button>
+  <button title="Mirror horizontally" disabled={!hasSelection} onclick={() => mirrorSelected('h')}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <line x1="8" y1="1" x2="8" y2="15" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
+      <path d="M6 4 L2 8 L6 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M10 4 L14 8 L10 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <button title="Mirror vertically" disabled={!hasSelection} onclick={() => mirrorSelected('v')}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
+      <path d="M4 6 L8 2 L12 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4 10 L8 14 L12 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <button title="Rotate 90° left ([)" disabled={!hasSelection} onclick={() => rotateSelectedBy(-90)}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <path d="M12 8A4 4 0 1 1 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+      <path d="M8 1 L8 5 L4.5 3.2 Z" fill="currentColor" />
+    </svg>
+  </button>
+  <button title="Rotate 90° right (])" disabled={!hasSelection} onclick={() => rotateSelectedBy(90)}>
+    <svg viewBox="0 0 16 16" width="15" height="15">
+      <path d="M4 8A4 4 0 1 0 8 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+      <path d="M8 1 L8 5 L11.5 3.2 Z" fill="currentColor" />
+    </svg>
+  </button>
+
+  <label class="chk">
+    <input type="checkbox" checked={toolState.lockPitch} onchange={(e) => setLockPitch(e.target.checked)} />
+    Lock pitch
+    <Help text="Default on. Locked: positions scale, strip size/pitch/LED count stay fixed. Unlocked: full geometric scale, pitch scales too." />
+  </label>
+
+  <span class="hint-line">{hintText}</span>
 </div>
 
 <AddStripsDialog bind:this={stripsDialog} />
@@ -196,5 +263,11 @@
     padding: 0.05rem 0.4rem;
     font-size: 0.68rem;
     font-weight: 700;
+  }
+  .hint-line {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 </style>

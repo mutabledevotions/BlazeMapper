@@ -19,17 +19,21 @@ In dev builds, `window.pm = { store, core }` is exposed in the browser console f
 
 ## Hotkeys
 
+This list mirrors the `HOTKEYS` table in `src/state/hotkeys.js`, which also backs the toolbar's one-line context hint (idle / selection / mid-drag / typing) -- keep the two in sync by hand when either changes, since there's no build-time doc generation here.
+
 - `S` — toggle grid snap. Ignored while a text field, select, or textarea has focus.
 - `Alt` (held during a drag) — temporarily inverts snap for that drag.
-- `Shift` (held while dragging the end handle) — snaps the angle to 15° steps.
-- `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
 - `F` — fit the view to the world box plus every strip's bounding box.
 - `Space` + drag, or middle-mouse drag — pan the canvas.
-- Mouse wheel — zoom, anchored at the cursor.
-- Click a strip — select it. `Shift`/`Cmd`-click a strip (on the canvas or in the strip list) — add or remove it from the selection.
+- Mouse wheel — pan; `Ctrl`/`Cmd`+wheel or pinch zooms, anchored at the cursor.
+- Click a strip — select it (canvas or strip list). `Shift`/`Cmd`-click a strip on the canvas — add or remove it from the selection.
+- In the strip list: plain click selects and sets the range anchor, `Ctrl`/`Cmd`-click toggles one row, `Shift`-click selects the range from the anchor in displayed (channel-grouped) order.
 - Left-drag on empty canvas — marquee-select every strip with at least one LED inside the rect; `Shift`/`Cmd` adds to the existing selection instead of replacing it.
-- `Esc` — clear the selection. `Delete`/`Backspace` — remove every selected strip. Both ignored while a text field, select, or textarea has focus.
-- With 2+ strips selected, drag the handle above the dashed group bbox to rotate the whole selection about its center (0.5° steps, `Shift` = 15°). Locked strips are skipped.
+- `Esc` — clear the selection. `Delete`/`Backspace` — remove every selected strip. `Ctrl`/`Cmd`+`D` — duplicate the selection, offset by one grid step. `[`/`]` — rotate the selection -90°/+90° about its bbox centre. Arrow keys — nudge the selection by one grid step (`Shift` = 10x, `Alt` = 1/10). All ignored while a text field, select, or textarea has focus.
+- `Shift` (held while dragging the end handle) — snaps the angle to 15° steps.
+- `Ctrl`/`Cmd` (held while dragging the end handle) — also resizes LED count from drag distance; without it, the end handle only rotates the strip in place.
+- With 1+ strips selected, drag a corner handle on the dashed selection bbox to uniform-scale it anchored at the opposite corner; the toolbar's "Lock pitch" toggle (default on) picks locked (positions move, strip size/pitch/LED count stay fixed) vs. unlocked (full geometric scale, pitch scales too).
+- With 2+ strips selected, drag the handle above the dashed group bbox to rotate the whole selection about its center (0.5° steps, `Shift` = 15°). Locked strips are skipped by every transform above.
 
 ## Pixelblaze map facts this tool relies on
 
@@ -66,6 +70,19 @@ In dev builds, `window.pm = { store, core }` is exposed in the browser console f
 - **Normalized export.** Every exported coordinate is `(p - world.origin) / world.size` (z divided by `world.size`), rounded to 4 decimals by default. Since units are only labels, the export is identical whether the project is drawn in mm, in, or px. A pixel that falls outside the world box triggers an "outside the world box" warning in the export drawer. Pixelblaze still rescales the whole map to its own bounds (Fill or Contain) before rendering, so the drawer notes using **Contain** to keep the world box's aspect ratio instead of stretching it. An experimental "Anchor world corners" checkbox (`project.export.anchors`, off by default, untested on real hardware) appends the normalized `[0,0]` and `[1,1]` corners to the map — these are never counted in the pixel total or channel summary.
 - **Multi-select.** `selection = { ids, primary }`. Click a strip (canvas or strip list) to select it; `Shift`/`Cmd`-click toggles it into or out of the selection. Left-drag on empty canvas draws a marquee that selects every strip with at least one sampled LED inside it (`Shift`/`Cmd` adds instead of replacing). `Esc` clears the selection, `Delete`/`Backspace` removes every selected strip (both ignored while typing in a field). Dragging any selected strip moves the whole selection by the same snapped delta; dragging an unselected strip selects just that one (or toggles it with Shift) and drags only it. With 2+ strips selected, a dashed group bounding box appears with a rotate handle above its top-centre that rotates the whole selection about the bbox centre (0.5° steps, `Shift` = 15°) — locked strips are skipped. Strip properties shows the primary strip's fields, or "N strips selected" when more than one is selected.
 - **Geometry registry gains `rotate`.** Every geometry type (`line`, `points`) now implements `rotate(geom, deg, center)` alongside `sample`/`handles`/`moveHandle`/`translate`/`scale`/`bbox`, so layout/export still never special-case shape type.
+
+## Phase 2c (this build)
+
+- **Accent orange.** `--accent: #ff9a3c`; `--accent-dim` and the marquee/focus-ring tints all derive from it via `color-mix(in srgb, var(--accent) N%, ...)` in `app.css`, so the brand color changes in one place.
+- **Styled inputs.** Shared rules in `app.css` for every `input`, `select`, `textarea`, and checkbox (panel background, border, radius, padding, accent focus ring, `accent-color` on checkboxes, a styled select arrow and number spinners) instead of each panel restating them.
+- **Help markers.** `Help.svelte` renders a small underlined `?`, right-aligned at the end of a label's line, that opens a styled tooltip box on hover or keyboard focus after ~200ms, clamped to the viewport. It replaces the old `title=` hints on property and dialog labels; buttons keep short native `title`s.
+- **Live modifier feedback.** A global `keys` state (`alt`/`shift`/`meta`/`ctrl`/`space`), set by one window listener and cleared on blur, drives: the Snap button's effective state (`snap XOR alt`) plus an "Alt" badge, a "15°" badge near the handle during any rotate drag, a "LED count" badge during an end-handle drag with Ctrl/Cmd held, and the grab cursor while Space is held.
+- **World X/Y/Size.** The toolbar now shows visible "X", "Y", "Size" labels instead of bundling them behind one tooltip.
+- **Export drawer** starts collapsed; its expand/collapse arrow uses the accent color.
+- **Selection tools.** New geometry registry functions `mirror(geom, axis, center)` and `scaleAbout(geom, k, center)` (line + points). Toolbar buttons (inline SVG icons, enabled only with a selection): Duplicate (`Ctrl`/`Cmd`+`D`, offsets by one grid step, inserts copies right after their originals), Mirror H/V (about the selection bbox centre), Rotate 90° L/R (`[`/`]`, reuses the existing group-rotate action). A corner-resize handle on the selection bbox (shown for 1+ strips) uniform-scales from the opposite corner; "Lock pitch" (default on, toolbar) picks locked (positions move, pitch/LED count/angle fixed) vs. unlocked (full geometric scale, pitch scales too).
+- **Strip list range select.** Click selects and sets an anchor, `Ctrl`/`Cmd`-click toggles one row, `Shift`-click selects the anchor-to-here range in displayed order.
+- **Hotkey hints.** `src/state/hotkeys.js` is the single table backing both this README's hotkey list and the toolbar's right-aligned, context-sensitive hint line (idle / selection / end-handle drag / group-resize drag / hidden while typing).
+- **Strip properties readout.** X/Y (relative to the world origin, in project units, editable) and Angle (single-strip only), plus nudge buttons (`← → ↑ ↓` move by one grid step, `Shift` = 10x, `Alt` = 1/10; `⟲ ⟳` rotate 0.5°, `Shift` = 15°). With a multi-selection the readout shows the group bbox origin and the nudges move/rotate the whole selection.
 
 ## Roadmap
 

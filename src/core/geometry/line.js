@@ -133,3 +133,29 @@ export function rotate(geom, deg, center) {
   if (geom.p1) next.p1 = rotatePoint(geom.p1, deg, center)
   return next
 }
+
+// Mirrors p0 (and p1, in fit mode) about `center`. axis 'h' flips x (left-right),
+// 'v' flips y (up-down). Wire order along the strip is unchanged -- only the
+// geometry moves -- so the direction vector flips too: a horizontal flip of
+// (cos a, sin a) is (-cos a, sin a), i.e. angle 180-a; a vertical flip is
+// (cos a, -sin a), i.e. angle -a. Both go through quantizeAngle for consistency
+// with every other angle-producing transform.
+export function mirror(geom, axis, center) {
+  const flip =
+    axis === 'h'
+      ? (p) => ({ x: center.x * 2 - p.x, y: p.y })
+      : (p) => ({ x: p.x, y: center.y * 2 - p.y })
+  const next = { ...geom, p0: flip(geom.p0), angle: quantizeAngle(axis === 'h' ? 180 - geom.angle : -geom.angle) }
+  if (geom.p1) next.p1 = flip(geom.p1)
+  return next
+}
+
+// Full geometric scale anchored at `center` (unlocked group-resize mode): both
+// p0 and p1 move. Pitch is scaled separately by the caller (store action),
+// since this module has no opinion on the strip's other fields.
+export function scaleAbout(geom, k, center) {
+  const sc = (p) => ({ x: center.x + (p.x - center.x) * k, y: center.y + (p.y - center.y) * k })
+  const next = { ...geom, p0: sc(geom.p0) }
+  if (geom.p1) next.p1 = sc(geom.p1)
+  return next
+}

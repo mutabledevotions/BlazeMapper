@@ -9,6 +9,7 @@
     view,
     keys,
     ui,
+    toolState,
     setDragMode,
     setView,
     selectStrip,
@@ -19,6 +20,10 @@
     translateStrip,
     translateStrips,
     rotateSelected,
+    rotateSelectedBy,
+    duplicateSelected,
+    scaleSelected,
+    nudgeSelected,
     moveHandle,
     toggleSnap,
     moveWorldOrigin,
@@ -40,6 +45,7 @@
   let worldDragState = null // { startWorld, lastDx, lastDy }
   let worldResizeState = null
   let rotateState = null // { center, startAngle, lastDeg }
+  let resizeState = null // { anchor, startDist, lastK }
   // World-space position of the handle currently being dragged, for the small
   // "15°" / "LED count" modifier badges -- null when nothing is being dragged.
   let dragHandlePos = $state(null)
@@ -52,6 +58,9 @@
 
   const selectedStrips = $derived(project.strips.filter((s) => selection.ids.includes(s.id)))
   const groupBbox = $derived(selectedStrips.length >= 2 ? stripsBbox(selectedStrips) : null)
+  // Resize handles (and their dashed outline) show for any non-empty selection,
+  // including a single strip -- only the rotate handle above is group-only.
+  const selBbox = $derived(selectedStrips.length >= 1 ? stripsBbox(selectedStrips) : null)
 
   $effect(() => {
     // Keep viewBox aspect equal to the element's, so the visible area is exactly
@@ -252,6 +261,18 @@
       rotateHandlePos = pt
       return
     }
+    if (resizeState) {
+      const pt = screenToWorld(evt)
+      const sx = snap(pt.x, project.world.x)
+      const sy = snap(pt.y, project.world.y)
+      const dist = Math.hypot(sx - resizeState.anchor.x, sy - resizeState.anchor.y)
+      const k = dist / resizeState.startDist
+      if (k > 0 && Math.abs(k - resizeState.lastK) > 1e-9) {
+        scaleSelected(k / resizeState.lastK, resizeState.anchor, toolState.lockPitch)
+        resizeState.lastK = k
+      }
+      return
+    }
     if (dragState) {
       const world = screenToWorld(evt)
       const dx = snap(world.x - dragState.startWorld.x, project.world.x)
@@ -308,6 +329,11 @@
     if (rotateState) {
       rotateState = null
       rotateHandlePos = null
+      svgEl.releasePointerCapture(evt.pointerId)
+    }
+    if (resizeState) {
+      resizeState = null
+      setDragMode(null)
       svgEl.releasePointerCapture(evt.pointerId)
     }
     if (dragState) {
@@ -376,6 +402,28 @@
     svgEl.setPointerCapture(evt.pointerId)
   }
 
+  const CORNER_OPPOSITE = { tl: 'br', tr: 'bl', bl: 'tr', br: 'tl' }
+
+  // Corner resize handle (shown on the selection bbox for 1+ selected strips).
+  // Uniform scale anchored at the opposite corner; see scaleSelected() for the
+  // locked-pitch vs. unlocked behaviour.
+  function startGroupResize(corner, evt) {
+    evt.stopPropagation()
+    if (!selBbox) return
+    const corners = {
+      tl: { x: selBbox.minX, y: selBbox.minY },
+      tr: { x: selBbox.maxX, y: selBbox.minY },
+      bl: { x: selBbox.minX, y: selBbox.maxY },
+      br: { x: selBbox.maxX, y: selBbox.maxY }
+    }
+    const anchor = corners[CORNER_OPPOSITE[corner]]
+    const start = corners[corner]
+    const startDist = Math.hypot(start.x - anchor.x, start.y - anchor.y) || 1
+    resizeState = { anchor, startDist, lastK: 1 }
+    setDragMode('groupResize')
+    svgEl.setPointerCapture(evt.pointerId)
+  }
+
   function isTypingTarget() {
     const tag = document.activeElement?.tagName
     return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
@@ -383,10 +431,13 @@
 
   // keys.* (alt/shift/meta/ctrl/space) is tracked globally by App.svelte's window
   // listener, shared by the Snap button, drag badges, and the hotkey hint line.
+  // This handler only does the feature-specific work: Space needs preventDefault
+  // here (so it doesn't "click" a focused toolbar button or scroll the page),
+  // and every selection-tool hotkey lives here since it already owns the pan/zoom
+  // keyboard surface.
   function onKeyDown(evt) {
     if (isTypingTarget()) return
     if (evt.code === 'Space') {
-      // Stop Space from "clicking" a focused toolbar button or scrolling the page.
       evt.preventDefault()
     }
     if (evt.key === 's' || evt.key === 'S') toggleSnap()
@@ -398,8 +449,36 @@
         removeSelected()
       }
     }
+    if ((evt.key === 'd' || evt.key === 'D') && (evt.ctrlKey || evt.metaKey)) {
+      if (selection.ids.length) {
+        evt.preventDefault()
+        duplicateSelected()
+      }
+    }
+    if (evt.key === '[' && selection.ids.length) {
+      evt.preventDefault()
+      rotateSelectedBy(-90)
+    }
+    if (evt.key === ']' && selection.ids.length) {
+      evt.preventDefault()
+      rotateSelectedBy(90)
+    }
+    if (ARROW_DELTA[evt.key] && selection.ids.length) {
+      evt.preventDefault()
+      const mult = evt.shiftKey ? 10 : evt.altKey ? 0.1 : 1
+      const step = gridStep(project) * mult
+      const [dx, dy] = ARROW_DELTA[evt.key]
+      nudgeSelected(dx * step, dy * step)
+    }
   }
   function onKeyUp() {}
+
+  const ARROW_DELTA = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1]
+  }
 
   const viewBoxStr = $derived(`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`)
   const worldLabel = $derived(`${project.world.size} × ${project.world.size} ${project.units}`)
@@ -469,16 +548,36 @@
     {/if}
   {/each}
 
-  {#if groupBbox}
+  {#if selBbox}
     <rect
       class="group-bbox"
-      x={groupBbox.minX}
-      y={groupBbox.minY}
-      width={groupBbox.maxX - groupBbox.minX}
-      height={groupBbox.maxY - groupBbox.minY}
+      x={selBbox.minX}
+      y={selBbox.minY}
+      width={selBbox.maxX - selBbox.minX}
+      height={selBbox.maxY - selBbox.minY}
       fill="none"
       vector-effect="non-scaling-stroke"
     />
+    {#each [
+      { id: 'tl', x: selBbox.minX, y: selBbox.minY, cursor: 'nwse-resize' },
+      { id: 'tr', x: selBbox.maxX, y: selBbox.minY, cursor: 'nesw-resize' },
+      { id: 'bl', x: selBbox.minX, y: selBbox.maxY, cursor: 'nesw-resize' },
+      { id: 'br', x: selBbox.maxX, y: selBbox.maxY, cursor: 'nwse-resize' }
+    ] as c (c.id)}
+      <rect
+        class="resize-handle"
+        x={c.x - handleSize / 2}
+        y={c.y - handleSize / 2}
+        width={handleSize}
+        height={handleSize}
+        style:cursor={c.cursor}
+        vector-effect="non-scaling-stroke"
+        onpointerdown={(evt) => startGroupResize(c.id, evt)}
+      ><title>Drag to scale the selection from the opposite corner ("Lock pitch" in the toolbar picks the mode)</title></rect>
+    {/each}
+  {/if}
+
+  {#if groupBbox}
     <line
       class="group-rotate-stem"
       x1={(groupBbox.minX + groupBbox.maxX) / 2}
@@ -565,6 +664,11 @@
     stroke: #222;
     stroke-width: 0.5;
     cursor: grab;
+  }
+  .resize-handle {
+    fill: var(--accent);
+    stroke: #222;
+    stroke-width: 0.5;
   }
   .mod-badge {
     fill: var(--accent);

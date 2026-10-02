@@ -3,7 +3,8 @@
 let idCounter = 0
 
 // Unique-enough id for a session; not persisted-stable across machines, fine for local use.
-function nextId(prefix) {
+// Exported so other code (duplicateSelected) can mint ids for cloned strips.
+export function newId(prefix) {
   idCounter += 1
   return `${prefix}_${Date.now().toString(36)}_${idCounter}`
 }
@@ -30,7 +31,7 @@ export function gridStep(project) {
 const STRIP_COLORS = ['#4fc3f7', '#ff8a65', '#aed581', '#ba68c8', '#ffd54f', '#4db6ac', '#f06292', '#90a4ae']
 
 export function newStrip(geomType = 'line', opts = {}) {
-  const id = nextId('strip')
+  const id = newId('strip')
   const colorIdx = idCounter % STRIP_COLORS.length
   const base = {
     id,
