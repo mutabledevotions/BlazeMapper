@@ -6,6 +6,7 @@
   import Help from './Help.svelte'
 
   let dialogEl
+  let geomType = $state('line')
 
   function defaults() {
     return {
@@ -23,14 +24,18 @@
     }
   }
 
-  // Last submitted values, remembered across opens and reloads. Lengths are
-  // stored with the unit they were entered in and converted if units changed.
-  const STORE_KEY = 'pm.addStrips.last'
+  // Last submitted values, remembered across opens and reloads (one memory per
+  // geometry type, since bezier's "offset" and line's "row spacing" aren't
+  // really the same knob). Lengths are stored with the unit they were entered
+  // in and converted if units changed.
   const LENGTH_FIELDS = ['pitch', 'rowSpacing', 'offset', 'z']
+  function storeKey() {
+    return `pm.addStrips.last.${geomType}`
+  }
 
   function loadLast() {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORE_KEY))
+      const saved = JSON.parse(localStorage.getItem(storeKey()))
       if (!saved || !saved.form) return null
       const f = { ...defaults(), ...saved.form }
       if (saved.units && saved.units !== project.units) {
@@ -44,13 +49,17 @@
 
   function saveLast(f) {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ units: project.units, form: f }))
+      localStorage.setItem(storeKey(), JSON.stringify({ units: project.units, form: f }))
     } catch {}
   }
 
   let form = $state(defaults())
 
-  export function open() {
+  // geomType: 'line' (default) or 'bezier'. Bezier reuses every field this
+  // dialog already has -- it just always places "stacked" (each strip offset
+  // from the view centre) since phase 5 only asked for that one placement.
+  export function open(type = 'line') {
+    geomType = type === 'bezier' ? 'bezier' : 'line'
     form = loadLast() || defaults()
     dialogEl.showModal()
   }
@@ -72,7 +81,7 @@
 
   function submit(evt) {
     evt.preventDefault()
-    addStrips({ ...form })
+    addStrips({ ...form, geomType })
     saveLast({ ...form })
     dialogEl.close()
   }
@@ -80,7 +89,7 @@
 
 <dialog bind:this={dialogEl} class="pm-dialog">
   <form onsubmit={submit}>
-    <h3>Add strips</h3>
+    <h3>{geomType === 'bezier' ? 'Add Bezier strips' : 'Add strips'}</h3>
     <div class="grid">
       <label>
         Count
@@ -137,32 +146,43 @@
           <option value="allOne">All on one channel</option>
         </select>
       </label>
-      <label>
-        Placement
-        <select bind:value={form.placement}>
-          <option value="rows">Rows</option>
-          <option value="matrix">Matrix (rows)</option>
-          <option value="stacked">Stacked at cursor</option>
-        </select>
-      </label>
-      {#if form.placement === 'stacked'}
+      {#if geomType === 'bezier'}
         <label>
           Offset per strip ({project.units})
           <input type="number" min="0" step="any" bind:value={form.offset} />
         </label>
       {:else}
         <label>
-          Row spacing ({project.units})
-          <input type="number" min="0" step="any" bind:value={form.rowSpacing} />
+          Placement
+          <select bind:value={form.placement}>
+            <option value="rows">Rows</option>
+            <option value="matrix">Matrix (rows)</option>
+            <option value="stacked">Stacked at cursor</option>
+          </select>
         </label>
-        <label class="chk">
-          <input type="checkbox" bind:checked={form.serpentine} />
-          Serpentine
-          <Help text="Reverses wire direction on every other row." />
-        </label>
+        {#if form.placement === 'stacked'}
+          <label>
+            Offset per strip ({project.units})
+            <input type="number" min="0" step="any" bind:value={form.offset} />
+          </label>
+        {:else}
+          <label>
+            Row spacing ({project.units})
+            <input type="number" min="0" step="any" bind:value={form.rowSpacing} />
+          </label>
+          <label class="chk">
+            <input type="checkbox" bind:checked={form.serpentine} />
+            Serpentine
+            <Help text="Reverses wire direction on every other row." />
+          </label>
+        {/if}
       {/if}
     </div>
-    <p class="hint">Strips are placed at the current view centre.</p>
+    <p class="hint">
+      {geomType === 'bezier'
+        ? 'Bezier strips are placed stacked at the current view centre, each a gentle S sized to fit its LED count at pitch.'
+        : 'Strips are placed at the current view centre.'}
+    </p>
     <div class="actions">
       <button type="button" onclick={() => dialogEl.close()}>Cancel</button>
       <button type="submit" class="primary">Add</button>

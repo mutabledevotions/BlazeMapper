@@ -5,10 +5,12 @@
 
 import * as line from './line.js'
 import * as points from './points.js'
+import * as bezier from './bezier.js'
 
 const REGISTRY = {
   line,
-  points
+  points,
+  bezier
 }
 
 function impl(geom) {

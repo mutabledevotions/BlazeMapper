@@ -450,6 +450,12 @@
     if (handleId === 'end') {
       dragHandlePos = pt
       setDragMode('endHandle')
+    } else {
+      const strip = project.strips.find((s) => s.id === stripId)
+      if (strip && strip.geom.type === 'bezier') {
+        dragHandlePos = pt
+        setDragMode('bezierHandle')
+      }
     }
   }
 
@@ -769,7 +775,7 @@
     ><title>Drag to rotate the selection (0.5° steps, Shift = 15°)</title></circle>
   {/if}
 
-  {#if dragHandlePos && ui.dragMode === 'endHandle' && keys.shift}
+  {#if dragHandlePos && (ui.dragMode === 'endHandle' || ui.dragMode === 'bezierHandle') && keys.shift}
     <text class="mod-badge" x={dragHandlePos.x + 14 * px} y={dragHandlePos.y - 14 * px} font-size={11 * px}>15°</text>
   {/if}
   {#if dragHandlePos && ui.dragMode === 'endHandle' && (keys.ctrl || keys.meta)}

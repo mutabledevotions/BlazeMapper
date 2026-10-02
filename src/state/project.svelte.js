@@ -199,10 +199,14 @@ export function addStrip(geomType = 'line', opts = {}) {
 // Batch placement for AddStripsDialog. opts:
 //   count, ledCount, pitch, colorType, z, startChannel, channelMode: 'perStrip' | 'allOne'
 //   placement: 'rows' | 'matrix' | 'stacked', rowSpacing, serpentine, offset
+//   geomType: 'line' (default) | 'bezier' -- bezier always places "stacked"
+//   (each strip offset from the view centre), since phase 5 only asked for
+//   that one placement mode for curves; rows/matrix/serpentine stay line-only.
 export function addStrips(opts) {
   const count = Math.max(1, opts.count | 0)
   const ledCount = Math.max(1, opts.ledCount | 0)
   const pitch = opts.pitch > 0 ? opts.pitch : 1
+  const geomType = opts.geomType === 'bezier' ? 'bezier' : 'line'
   const created = []
   const cx = view.x
   const cy = view.y
@@ -211,26 +215,28 @@ export function addStrips(opts) {
   const channelCursor = new Map() // channel -> last address claimed so far (seeded lazily below)
 
   for (let i = 0; i < count; i++) {
-    let p0
-    if (opts.placement === 'stacked') {
-      p0 = { x: cx + i * offset, y: cy + i * offset }
+    let geomOpts
+    if (geomType === 'bezier') {
+      geomOpts = { center: { x: cx + i * offset, y: cy + i * offset } }
+    } else if (opts.placement === 'stacked') {
+      geomOpts = { p0: { x: cx + i * offset, y: cy + i * offset }, angle: 0 }
     } else {
       // rows and matrix share layout: N parallel rows, serpentine optional.
       const totalH = (count - 1) * rowSpacing
       const rowLen = (ledCount - 1) * pitch
-      p0 = { x: cx - rowLen / 2, y: cy - totalH / 2 + i * rowSpacing }
+      geomOpts = { p0: { x: cx - rowLen / 2, y: cy - totalH / 2 + i * rowSpacing }, angle: 0 }
     }
-    const reversed = Boolean(opts.serpentine) && opts.placement !== 'stacked' && i % 2 === 1
+    const reversed = geomType === 'line' && Boolean(opts.serpentine) && opts.placement !== 'stacked' && i % 2 === 1
     const channel = opts.channelMode === 'allOne' ? opts.startChannel ?? 0 : (opts.startChannel ?? 0) + i
 
-    const strip = newStrip('line', {
+    const strip = newStrip(geomType, {
       ledCount,
       pitch,
       colorType: opts.colorType || 'RGB',
       z: opts.z ?? 0,
       channel,
       reversed,
-      geom: { p0, angle: 0 }
+      geom: geomOpts
     })
     if (!channelCursor.has(channel)) channelCursor.set(channel, channelLastAddress(channel))
     strip.start = channelCursor.get(channel) + 1

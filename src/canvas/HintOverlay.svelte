@@ -8,6 +8,7 @@
     if (ui.typing) return ''
     if (calibration.active) return contextHint('calibrate')
     if (ui.dragMode === 'endHandle') return contextHint('endHandleDrag')
+    if (ui.dragMode === 'bezierHandle') return contextHint('bezierHandleDrag')
     if (ui.dragMode === 'groupResize') return contextHint('groupResizeDrag')
     return selection.ids.length > 0 ? contextHint('selection') : contextHint('idle')
   })
