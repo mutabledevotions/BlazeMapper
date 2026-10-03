@@ -10,7 +10,7 @@
     toggleSnap,
     setLockPitch,
     setOpenPopup,
-    closeOpenPopup,
+    closePopup,
     duplicateSelected,
     mirrorSelected,
     rotateSelectedBy,
@@ -196,9 +196,9 @@
 
 <AddStripsDialog bind:this={stripsDialog} />
 <AddPixelsDialog bind:this={pixelsDialog} />
-<GridPanel open={ui.openPopup === 'grid'} onClose={closeOpenPopup} />
-<WorldPanel open={ui.openPopup === 'world'} onClose={closeOpenPopup} />
-<ImagePanel open={ui.openPopup === 'image'} onClose={closeOpenPopup} />
+<GridPanel open={ui.openPopup === 'grid'} onClose={() => closePopup('grid')} />
+<WorldPanel open={ui.openPopup === 'world'} onClose={() => closePopup('world')} />
+<ImagePanel open={ui.openPopup === 'image'} onClose={() => closePopup('image')} />
 
 <style>
   .toolbar {

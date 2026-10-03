@@ -163,6 +163,13 @@ export function closeOpenPopup() {
   ui.openPopup = null
 }
 
+// Close only if `name` is still the open popup. A <dialog>'s close event also
+// fires when switching to another popup; clearing unconditionally there would
+// wipe out the popup that was just opened.
+export function closePopup(name) {
+  if (ui.openPopup === name) ui.openPopup = null
+}
+
 // Group-resize "Lock pitch" toggle (default on). Not part of the project model --
 // it's a tool preference, not saved layout data.
 export const toolState = $state({ lockPitch: true })
